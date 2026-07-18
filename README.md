@@ -11,8 +11,6 @@ Live service: <https://smol.ly>
 **Tiny setup. Serious docs.** The product origin is `smol.ly`; hosted projects
 use `{project}.smol.ly`, and teams can attach their own custom domain.
 
-![Smolify setup co-pilot](docs/assets/onboarding.png)
-
 ## What works
 
 - Original Next.js documentation UI and Markdown rendering pipeline

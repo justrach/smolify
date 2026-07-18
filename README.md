@@ -6,7 +6,7 @@ Markdown into a versioned bundle, and publishes it to a hosted docs experience.
 
 Smolify does not use Fumadocs and does not execute runtime MDX.
 
-Live service: <https://smol.ly>
+Planned control plane: <https://app.smol.ly>
 
 **Tiny setup. Serious docs.** The product origin is `smol.ly`; hosted projects
 use `{project}.smol.ly`, and teams can attach their own custom domain.
@@ -108,7 +108,7 @@ Connect the remote MCP once. Codex opens the OAuth flow in your browser; no API
 key is pasted into chat or stored in the repository.
 
 ```bash
-codex mcp add smolify --url https://smol.ly/mcp
+codex mcp add smolify --url https://app.smol.ly/mcp
 codex mcp login smolify
 ```
 

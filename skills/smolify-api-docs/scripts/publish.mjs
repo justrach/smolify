@@ -4,7 +4,7 @@ import { resolve } from "node:path";
 const input = process.argv[2];
 const token = process.env.SMOLIFY_PUBLISH_TOKEN;
 const project = process.env.SMOLIFY_PROJECT;
-const endpoint = (process.env.SMOLIFY_ENDPOINT || "https://smol.ly").replace(/\/$/, "");
+const endpoint = (process.env.SMOLIFY_ENDPOINT || "https://app.smol.ly").replace(/\/$/, "");
 
 if (!input) throw new Error("Usage: publish.mjs <bundle.json>");
 if (!token) throw new Error("SMOLIFY_PUBLISH_TOKEN is required");

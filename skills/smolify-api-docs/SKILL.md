@@ -77,7 +77,7 @@ fallback below.
 Require these environment variables:
 
 - `SMOLIFY_PUBLISH_TOKEN` — project-scoped token from the Smolify dashboard
-- `SMOLIFY_ENDPOINT` — optional; defaults to `https://smol.ly`
+- `SMOLIFY_ENDPOINT` — optional; defaults to `https://app.smol.ly`
 - `SMOLIFY_PROJECT` — the project slug
 
 Then run:

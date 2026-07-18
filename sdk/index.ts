@@ -14,7 +14,7 @@ export class SmolifyClient {
   private readonly request: typeof globalThis.fetch;
 
   constructor(options: SmolifyClientOptions) {
-    this.baseUrl = (options.baseUrl ?? "https://smol.ly").replace(/\/$/, "");
+    this.baseUrl = (options.baseUrl ?? "https://app.smol.ly").replace(/\/$/, "");
     this.tokenProvider =
       typeof options.accessToken === "function"
         ? options.accessToken

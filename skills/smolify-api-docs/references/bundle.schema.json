@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://smol.ly/schemas/bundle-v1.json",
+  "$id": "https://app.smol.ly/schemas/bundle-v1.json",
   "title": "Smolify documentation bundle",
   "type": "object",
   "additionalProperties": false,

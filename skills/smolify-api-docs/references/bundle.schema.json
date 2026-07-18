@@ -23,7 +23,7 @@
       "additionalProperties": false,
       "required": ["name", "model"],
       "properties": {
-        "name": { "const": "codex" },
+        "name": { "enum": ["codex", "smolify"] },
         "model": { "type": "string", "minLength": 1, "maxLength": 80 }
       }
     },

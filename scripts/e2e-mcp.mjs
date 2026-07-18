@@ -37,7 +37,7 @@ await json(
 );
 
 const redirectUri = "http://127.0.0.1/callback";
-const requestedScopes = "openid profile offline_access projects:read docs:read docs:publish";
+const requestedScopes = "openid profile offline_access projects:read docs:read docs:contribute docs:publish";
 const registration = await json(
   await fetch(`${baseURL}/api/auth/oauth2/register`, {
     method: "POST",
@@ -143,7 +143,7 @@ assert.equal(initialized.result.serverInfo.name, "smolify");
 const tools = await rpc("tools/list", {});
 assert.deepEqual(
   tools.result.tools.map((tool) => tool.name).sort(),
-  ["get_doc_page", "list_projects", "publish_docs", "search_docs"],
+  ["discover_public_projects", "get_doc_page", "list_projects", "propose_doc_improvement", "publish_docs", "rate_docs", "search_docs"],
 );
 
 const bundle = JSON.parse(await readFile(new URL("../examples/pawprint/smolify.bundle.json", import.meta.url)));

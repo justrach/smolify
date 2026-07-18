@@ -1,0 +1,52 @@
+import { getCloudflareContext } from "@opennextjs/cloudflare";
+import { z } from "zod";
+import { createAuth } from "@/lib/auth";
+import { buildRepositoryBundle, fetchGithubSnapshot, parseGithubRepositoryUrl } from "@/lib/imports/repository";
+import { publishDocsDeployment } from "@/lib/docs/deployments";
+import { createProjectForUser, uniqueProjectSlug } from "@/lib/projects/service";
+
+const importSchema = z.object({
+  url: z.string().url().max(500),
+  visibility: z.enum(["public", "private"]).default("public"),
+});
+
+export async function POST(request: Request) {
+  const auth = await createAuth(request);
+  const session = await auth.api.getSession({ headers: request.headers });
+  if (!session) return Response.json({ error: "Authentication required" }, { status: 401 });
+
+  const parsed = importSchema.safeParse(await request.json().catch(() => null));
+  if (!parsed.success) return Response.json({ error: "Enter a valid GitHub repository URL" }, { status: 422 });
+
+  try {
+    const github = parseGithubRepositoryUrl(parsed.data.url);
+    const snapshot = await fetchGithubSnapshot(github.url);
+    const bundle = buildRepositoryBundle(snapshot);
+    const { env } = await getCloudflareContext({ async: true });
+    const slug = await uniqueProjectSlug(env, snapshot.name);
+    const project = await createProjectForUser(env, session.user, {
+      name: snapshot.name,
+      slug,
+      visibility: parsed.data.visibility,
+      sourceType: "github",
+      sourceUrl: snapshot.sourceUrl,
+      sourceRevision: snapshot.revision,
+      sourceFileCount: snapshot.totalFiles,
+      importedAt: bundle.generatedAt,
+    });
+    try {
+      const deployment = await publishDocsDeployment(env, project, bundle, {
+        origin: new URL(request.url).origin,
+      });
+      return Response.json({ project, deployment }, { status: 201 });
+    } catch (error) {
+      await env.DB.prepare("DELETE FROM projects WHERE id = ?").bind(project.id).run();
+      throw error;
+    }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unable to import repository";
+    const expected = /repository|github|rate limit|private/i.test(message);
+    if (!expected) console.error("GitHub import failed", error);
+    return Response.json({ error: message }, { status: expected ? 422 : 500 });
+  }
+}

@@ -11,6 +11,7 @@ export const SMOLIFY_OAUTH_SCOPES = [
   "offline_access",
   "projects:read",
   "docs:read",
+  "docs:contribute",
   "docs:publish",
 ] as const;
 
@@ -67,7 +68,7 @@ export async function createAuth(request?: Request) {
             name: "Smolify MCP",
             accessTokenTtl: 15 * 60,
             refreshTokenTtl: 30 * 24 * 60 * 60,
-            allowedScopes: ["projects:read", "docs:read", "docs:publish"],
+            allowedScopes: ["projects:read", "docs:read", "docs:contribute", "docs:publish"],
           },
         ],
         // Smolify has one protected resource. Dynamically registered desktop
@@ -84,8 +85,9 @@ export async function createAuth(request?: Request) {
           "offline_access",
           "projects:read",
           "docs:read",
+          "docs:contribute",
         ],
-        clientRegistrationAllowedScopes: ["email", "docs:publish"],
+        clientRegistrationAllowedScopes: ["email", "docs:contribute", "docs:publish"],
         accessTokenExpiresIn: 15 * 60,
         scopeExpirations: { "docs:publish": "15m" },
         prefix: {

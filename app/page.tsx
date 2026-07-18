@@ -7,16 +7,16 @@ export default function HomePage() {
       <nav className="landing-nav">
         <Brand />
         <div className="nav-actions">
-          <Link href="/pawprint/introduction">Demo docs</Link>
-          <Link href="/dashboard" className="button button-small">Open dashboard</Link>
+          <Link href="/explore">Explore</Link>
+          <Link href="/dashboard" className="button button-small">Import a repository</Link>
         </div>
       </nav>
       <section className="hero">
         <div className="eyebrow">Tiny setup. Serious docs.</div>
         <h1>Your code knows the truth.<br /><span>Codex writes the docs.</span></h1>
-        <p>Connect one MCP and one repository skill. Codex turns your API contract and implementation into reviewable Markdown; Smolify publishes it at a very good URL.</p>
+        <p>Paste a public GitHub URL or upload a private repository ZIP. Smolify makes the first useful page immediately; Codex agents review and improve it without bypassing the owner.</p>
         <div className="hero-actions">
-          <Link href="/pawprint/introduction" className="button">Explore generated docs</Link>
+          <Link href="/dashboard" className="button">Import any repository</Link>
           <a href="#flow" className="text-link">See how it works <span>→</span></a>
         </div>
         <div className="command"><span>›</span> codex <b>“Use $smolify-api-docs to document this API”</b></div>

@@ -1,9 +1,13 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { notFound } from "next/navigation";
+import { headers } from "next/headers";
+import { notFound, redirect } from "next/navigation";
+import { getCloudflareContext } from "@opennextjs/cloudflare";
 import { renderMarkdown } from "@/lib/docs/markdown";
 import { getDocsBundle } from "@/lib/docs/repository";
 import { BrandMark } from "@/components/brand";
+import { createAuth } from "@/lib/auth";
+import { getAccessibleProject } from "@/lib/projects/access";
 
 type PageProps = {
   params: Promise<{ project: string; slug?: string[] }>;
@@ -11,6 +15,13 @@ type PageProps = {
 
 export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
   const { project, slug } = await params;
+  if (project !== "pawprint") {
+    const { env } = await getCloudflareContext({ async: true });
+    const record = await env.DB.prepare(
+      "SELECT visibility FROM projects WHERE slug = ? AND deleted_at IS NULL",
+    ).bind(project).first<{ visibility: "public" | "private" }>();
+    if (record?.visibility === "private") return { title: "Private documentation" };
+  }
   const bundle = await getDocsBundle(project);
   const page = bundle?.pages.find((item) => item.slug === (slug?.join("/") || "introduction"));
   return page ? { title: page.title, description: page.description } : {};
@@ -18,6 +29,40 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
 
 export default async function DocsPage({ params }: PageProps) {
   const { project, slug } = await params;
+  let sourceUrl: string | null = null;
+  let visibility: "public" | "private" = "public";
+  let ratingAverage = 0;
+  let ratingCount = 0;
+  if (project !== "pawprint") {
+    const { env } = await getCloudflareContext({ async: true });
+    const record = await env.DB.prepare(
+      `SELECT projects.visibility, projects.source_url AS sourceUrl,
+         COALESCE(AVG(doc_ratings.score), 0) AS ratingAverage,
+         COUNT(doc_ratings.id) AS ratingCount
+       FROM projects
+       LEFT JOIN doc_ratings ON doc_ratings.project_id = projects.id
+       WHERE projects.slug = ? AND projects.deleted_at IS NULL
+       GROUP BY projects.id`,
+    ).bind(project).first<{
+      visibility: "public" | "private";
+      sourceUrl: string | null;
+      ratingAverage: number;
+      ratingCount: number;
+    }>();
+    if (!record) notFound();
+    ({ visibility, sourceUrl, ratingAverage, ratingCount } = record);
+    if (visibility === "private") {
+      const requestHeaders = await headers();
+      const host = requestHeaders.get("host") ?? new URL(env.BETTER_AUTH_URL).host;
+      const protocol = requestHeaders.get("x-forwarded-proto")
+        ?? (host.startsWith("localhost") || host.startsWith("127.0.0.1") ? "http" : "https");
+      const auth = await createAuth(new Request(`${protocol}://${host}/${project}`, { headers: requestHeaders }));
+      const session = await auth.api.getSession({ headers: requestHeaders });
+      const returnTo = `/${project}/${slug?.join("/") || "introduction"}`;
+      if (!session) redirect(`${env.BETTER_AUTH_URL}/login?returnTo=${encodeURIComponent(returnTo)}`);
+      if (!await getAccessibleProject(env, session.user.id, project)) notFound();
+    }
+  }
   const bundle = await getDocsBundle(project);
   if (!bundle) notFound();
 
@@ -31,10 +76,13 @@ export default async function DocsPage({ params }: PageProps) {
       <header className="docs-header">
         <Link href={`/${project}/introduction`} className="docs-brand"><span>{bundle.project.name.slice(0, 1)}</span>{bundle.project.name}</Link>
         <div className="docs-search"><kbd>⌘ K</kbd><span>Search documentation</span></div>
-        <a className="github-link" href="https://github.com" aria-label="GitHub">GitHub ↗</a>
+        {sourceUrl
+          ? <a className="github-link" href={sourceUrl} rel="noreferrer">Source ↗</a>
+          : <span className="github-link">{visibility === "private" ? "Private repository" : "Generated docs"}</span>}
       </header>
       <aside className="docs-sidebar">
-        <p className="powered-by"><BrandMark compact />Hosted by Smolify</p>
+        <p className="powered-by"><BrandMark compact />Hosted by Smolify · {visibility}</p>
+        {visibility === "public" && ratingCount > 0 && <p className="community-score">★ {Number(ratingAverage).toFixed(1)} from {ratingCount} agent {ratingCount === 1 ? "rating" : "ratings"}</p>}
         {bundle.navigation.map((group) => (
           <nav key={group.label}>
             <h2>{group.label}</h2>

@@ -3,7 +3,8 @@ import { z } from "zod";
 import { docsBundleSchema } from "@/lib/docs/schema";
 import { publishDocsDeployment } from "@/lib/docs/deployments";
 import { getActiveDocPage, searchActiveDocs } from "@/lib/docs/search-repository";
-import { getAccessibleProject, listAccessibleProjects } from "@/lib/projects/access";
+import { getAccessibleProject, getReadableProject, listAccessibleProjects, listPublicProjects } from "@/lib/projects/access";
+import { createImprovementProposal, gpt56ModelSchema, rateProjectDocs } from "@/lib/contributions/repository";
 import type { McpPrincipal } from "./auth";
 
 function toolResult(value: Record<string, unknown>) {
@@ -23,6 +24,12 @@ async function requireProject(env: CloudflareEnv, principal: McpPrincipal, proje
   return accessible;
 }
 
+async function requireReadableProject(env: CloudflareEnv, principal: McpPrincipal, project: string) {
+  const readable = await getReadableProject(env, principal.userId, project);
+  if (!readable) throw new Error(`Project not found or not readable: ${project}`);
+  return readable;
+}
+
 export function createSmolifyMcpServer(
   env: CloudflareEnv,
   principal: McpPrincipal,
@@ -32,7 +39,27 @@ export function createSmolifyMcpServer(
     { name: "smolify", version: "0.1.0" },
     {
       instructions:
-        "Smolify publishes and searches API documentation. Inspect and author docs in the local repository first. Search before reading a page, fetch bounded slices, and only call publish_docs after the user has reviewed the generated bundle and explicitly approved publication.",
+        "Smolify publishes, searches, rates, and improves repository documentation. Search before reading a page and fetch bounded slices. Public projects may be rated or given a complete improvement proposal by authenticated GPT-5.6 agents. Proposals never publish automatically: the project owner reviews them. Only call publish_docs for an owned project after the user has reviewed the generated bundle and explicitly approved publication.",
+    },
+  );
+
+  server.registerTool(
+    "discover_public_projects",
+    {
+      title: "Discover public repository documentation",
+      description: "List public Smolify projects that agents may search, rate, and propose improvements for.",
+      inputSchema: z.object({ query: z.string().trim().max(120).optional() }),
+      annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+    },
+    async ({ query }) => {
+      requireScope(principal, "projects:read");
+      const projects = await listPublicProjects(env, 48);
+      const normalized = query?.toLowerCase();
+      return toolResult({
+        projects: normalized
+          ? projects.filter((project) => `${project.name} ${project.slug} ${project.sourceUrl ?? ""}`.toLowerCase().includes(normalized))
+          : projects,
+      });
     },
   );
 
@@ -65,7 +92,7 @@ export function createSmolifyMcpServer(
     },
     async ({ project, query, limit }) => {
       requireScope(principal, "docs:read");
-      await requireProject(env, principal, project);
+      await requireReadableProject(env, principal, project);
       return toolResult(await searchActiveDocs(env, project, query, limit));
     },
   );
@@ -86,10 +113,67 @@ export function createSmolifyMcpServer(
     },
     async ({ project, slug, offset, length }) => {
       requireScope(principal, "docs:read");
-      await requireProject(env, principal, project);
+      await requireReadableProject(env, principal, project);
       const page = await getActiveDocPage(env, project, slug, offset, length);
       if (!page) throw new Error(`Documentation page not found: ${slug}`);
       return toolResult({ ...page, offset, length });
+    },
+  );
+
+  server.registerTool(
+    "rate_docs",
+    {
+      title: "Rate public documentation",
+      description: "Record or update one authenticated GPT-5.6 agent rating for a readable project.",
+      inputSchema: z.object({
+        project: z.string().min(1).max(120),
+        score: z.number().int().min(1).max(5),
+        notes: z.string().trim().max(2_000).optional(),
+        model: gpt56ModelSchema,
+      }),
+      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+    },
+    async ({ project, score, notes, model }) => {
+      requireScope(principal, "docs:contribute");
+      const readable = await requireReadableProject(env, principal, project);
+      const aggregate = await rateProjectDocs(env, {
+        projectId: readable.id,
+        userId: principal.userId,
+        score,
+        notes,
+        model,
+      });
+      return toolResult({ project, score, aggregate });
+    },
+  );
+
+  server.registerTool(
+    "propose_doc_improvement",
+    {
+      title: "Propose improved documentation",
+      description: "Submit a complete validated replacement bundle for owner review. This never changes the live deployment by itself.",
+      inputSchema: z.object({
+        project: z.string().min(1).max(120),
+        model: gpt56ModelSchema,
+        summary: z.string().trim().min(8).max(240),
+        rationale: z.string().trim().min(20).max(4_000),
+        bundle: docsBundleSchema,
+      }),
+      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
+    },
+    async ({ project, model, summary, rationale, bundle }) => {
+      requireScope(principal, "docs:contribute");
+      const readable = await requireReadableProject(env, principal, project);
+      const proposal = await createImprovementProposal(env, {
+        projectId: readable.id,
+        authorUserId: principal.userId,
+        activeDeploymentId: readable.activeDeploymentId,
+        bundle,
+        model,
+        summary,
+        rationale,
+      });
+      return toolResult({ project, ...proposal, publicationChanged: false });
     },
   );
 

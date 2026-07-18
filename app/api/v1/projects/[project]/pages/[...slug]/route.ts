@@ -1,5 +1,6 @@
 import { getCloudflareContext } from "@opennextjs/cloudflare";
 import { getActiveDocPage } from "@/lib/docs/search-repository";
+import { authorizeProjectRead } from "@/lib/projects/authorization";
 
 type RouteContext = { params: Promise<{ project: string; slug: string[] }> };
 
@@ -10,6 +11,9 @@ export async function GET(request: Request, { params }: RouteContext) {
   const requestedLength = Number.parseInt(url.searchParams.get("length") ?? "12000", 10) || 12000;
   const length = Math.min(40_000, Math.max(1_000, requestedLength));
   const { env } = await getCloudflareContext({ async: true });
+  if (!await authorizeProjectRead(request, env, project)) {
+    return Response.json({ error: "Page not found" }, { status: 404 });
+  }
 
   const page = await getActiveDocPage(env, project, slug.join("/"), offset, length);
 

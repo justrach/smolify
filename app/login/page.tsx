@@ -29,10 +29,13 @@ export default function LoginPage() {
             if (result.error) setError(result.error.message ?? "Authentication failed");
             else {
               const oauthQuery = window.location.search.slice(1);
+              const returnTo = new URLSearchParams(oauthQuery).get("returnTo");
               window.location.assign(
                 new URLSearchParams(oauthQuery).has("client_id")
                   ? `/api/auth/oauth2/authorize?${oauthQuery}`
-                  : "/dashboard",
+                  : returnTo?.startsWith("/") && !returnTo.startsWith("//")
+                    ? returnTo
+                    : "/dashboard",
               );
             }
           }}

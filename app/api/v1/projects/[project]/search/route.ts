@@ -1,5 +1,6 @@
 import { getCloudflareContext } from "@opennextjs/cloudflare";
 import { searchActiveDocs } from "@/lib/docs/search-repository";
+import { authorizeProjectRead } from "@/lib/projects/authorization";
 
 type RouteContext = { params: Promise<{ project: string }> };
 
@@ -13,6 +14,9 @@ export async function GET(request: Request, { params }: RouteContext) {
     : 8;
   const { project } = await params;
   const { env } = await getCloudflareContext({ async: true });
+  if (!await authorizeProjectRead(request, env, project)) {
+    return Response.json({ error: "Project not found" }, { status: 404 });
+  }
 
   return Response.json(await searchActiveDocs(env, project, query, limit));
 }

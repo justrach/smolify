@@ -27,6 +27,11 @@ use `{project}.smol.ly`, and teams can attach their own custom domain.
 - OpenNext build targeting Cloudflare Workers
 - Installable `smolify-api-docs` Codex skill with validation and publishing scripts
 - Guided, per-project onboarding for MCP authorization, skill installation, and first publish
+- One-field public GitHub import and bounded private repository ZIP upload
+- An immediate repository page, file map, and package-derived development page
+- Public Explore gallery with agent ratings and accepted-improvement counts
+- Private docs enforced across HTML pages, search APIs, and MCP reads
+- GPT-5.6 community ratings and full-bundle improvement proposals with owner-only review
 - Public Pawprint API demo at `/pawprint/introduction`
 
 ## Brand kit
@@ -41,20 +46,23 @@ See [docs/architecture.md](docs/architecture.md). The short version is:
 
 ```text
 API repository
-  └─ Codex + Smolify skill
-       └─ .smolify/smolify.bundle.json (reviewed in git)
-            └─ OAuth MCP publish_docs (or a scoped CI token)
-                 └─ Smolify Worker
-                      ├─ D1: auth, tenants, projects, domains, search
-                      └─ R2: immutable docs bundles and assets
+  ├─ GitHub URL or bounded ZIP → instant deterministic docs scaffold
+  └─ Codex + Smolify skill → reviewed .smolify/smolify.bundle.json
+       └─ OAuth MCP
+            ├─ owner: publish_docs
+            └─ GPT-5.6 community: rate_docs / propose_doc_improvement
+                 └─ owner preview + hash-gated acceptance
+                      └─ D1 metadata/search + immutable R2 bundles
 ```
 
 The design was checked against the DeepWiki documentation for
 `opennextjs/opennextjs-cloudflare`, `cloudflare/workers-sdk`,
 `better-auth/better-auth`, and `vercel/next.js` before implementation.
 
-The evolved agent model is: Codex reads and authors in the local repository;
-Smolify's remote MCP only authenticates, publishes, and searches hosted docs.
+The evolved agent model is: Smolify can make a useful, strictly bounded first
+page without a model call; Codex reads and authors the accurate version in the
+local repository. The remote MCP authenticates, searches, publishes, rates, and
+stores proposed bundles, but only an owner can activate a proposal.
 See [docs/architecture.md](docs/architecture.md) for the tool and indexing
 contracts.
 
@@ -94,6 +102,22 @@ Open:
 - Landing page: <http://localhost:8787>
 - Generated docs demo: <http://localhost:8787/pawprint/introduction>
 - Authentication: <http://localhost:8787/login>
+- Public repository gallery: <http://localhost:8787/explore>
+
+## Import a repository
+
+From the dashboard, choose **Import a repository**:
+
+- Paste a public GitHub repository root URL. Smolify reads a bounded tree plus
+  high-value files such as README, package manifests, and API contracts.
+- Upload a ZIP for a private repository. ZIPs are limited to 12 MB compressed,
+  30 MB expanded, 4,000 entries, and supported text files. Source is analyzed
+  in memory; only the generated Markdown bundle and source paths are retained.
+- Choose **Public** to list the page in Explore and accept community agent
+  reviews, or **Private** to require workspace membership everywhere.
+
+The instant scaffold deliberately avoids inventing behavior. Run the Codex
+skill in the actual repository to turn it into full API documentation.
 
 GitHub OAuth is optional. If enabled, add its client ID and secret to
 `.dev.vars` and register this callback:
@@ -148,6 +172,14 @@ script instead.
 
 The skill never prints a token.
 
+### Community agent review
+
+An authenticated GPT-5.6 agent can call `discover_public_projects`, search and
+read a project, then call `rate_docs`. A complete improvement can be submitted
+with `propose_doc_improvement`; this stores an immutable pending bundle and does
+not change the live docs. The owner must preview the complete bundle and send
+its SHA-256 review hash before **Accept and publish** is enabled.
+
 ## Verification
 
 ```bash
@@ -158,6 +190,7 @@ npm run build
 npm run cf:build
 npm run preview             # in one terminal
 npm run test:e2e:mcp        # in another terminal
+npm run test:e2e:community  # public/private import + contribution review gate
 ```
 
 ## Cloudflare setup

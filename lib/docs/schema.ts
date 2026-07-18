@@ -31,7 +31,7 @@ export const docsBundleSchema = z.object({
   }),
   generatedAt: z.string().datetime(),
   generator: z.object({
-    name: z.literal("codex"),
+    name: z.enum(["codex", "smolify"]),
     model: z.string().min(1).max(80),
   }),
   navigation: z.array(docsNavigationGroupSchema).min(1).max(30),

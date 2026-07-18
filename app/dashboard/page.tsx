@@ -6,9 +6,13 @@ import { SignOutButton } from "@/components/sign-out-button";
 import { CreateProjectForm } from "@/components/create-project-form";
 import { CustomDomainControl } from "@/components/custom-domain-control";
 import { SetupAssistant } from "@/components/setup-assistant";
+import { ImportRepositoryForm } from "@/components/import-repository-form";
 import { createAuth } from "@/lib/auth";
 import { getCloudflareContext } from "@opennextjs/cloudflare";
 import { listAccessibleProjects } from "@/lib/projects/access";
+import { listProjectProposals } from "@/lib/contributions/repository";
+import { ProposalReviewList } from "@/components/proposal-review-list";
+import { ProjectVisibilityControl } from "@/components/project-visibility-control";
 
 type DashboardProps = {
   searchParams: Promise<{ project?: string }>;
@@ -35,12 +39,15 @@ export default async function DashboardPage({ searchParams }: DashboardProps) {
     ?? projects.find((project) => !project.activeDeploymentId)
     ?? projects[0];
   const publishedCount = projects.filter((project) => project.activeDeploymentId).length;
+  const proposals = selectedProject
+    ? await listProjectProposals(env, selectedProject.id)
+    : [];
 
   return (
     <main className="dashboard-shell">
       <header>
         <Brand />
-        <div className="account-actions"><span>{session.user.email}</span><SignOutButton /></div>
+        <div className="account-actions"><Link href="/explore">Explore</Link><span>{session.user.email}</span><SignOutButton /></div>
       </header>
 
       <section className="dashboard-hero">
@@ -49,7 +56,7 @@ export default async function DashboardPage({ searchParams }: DashboardProps) {
           <h1>Small setup.<br />Docs that know your code.</h1>
           <p>Create a project, authorize Codex, and publish only after you review the generated diff.</p>
         </div>
-        <CreateProjectForm />
+        <div className="dashboard-primary-actions"><ImportRepositoryForm /><CreateProjectForm /></div>
       </section>
 
       {projects.length > 0 && (
@@ -61,13 +68,16 @@ export default async function DashboardPage({ searchParams }: DashboardProps) {
       )}
 
       {selectedProject && (
-        <SetupAssistant
-          endpoint={env.BETTER_AUTH_URL.replace(/\/$/, "")}
-          mcpConnected={Boolean(consent)}
-          projectName={selectedProject.name}
-          projectSlug={selectedProject.slug}
-          published={Boolean(selectedProject.activeDeploymentId)}
-        />
+        <>
+          <SetupAssistant
+            endpoint={env.BETTER_AUTH_URL.replace(/\/$/, "")}
+            mcpConnected={Boolean(consent)}
+            projectName={selectedProject.name}
+            projectSlug={selectedProject.slug}
+            published={Boolean(selectedProject.activeDeploymentId)}
+          />
+          <ProposalReviewList project={selectedProject.slug} proposals={proposals} />
+        </>
       )}
 
       <section className="projects-section" aria-labelledby="projects-heading">
@@ -81,13 +91,16 @@ export default async function DashboardPage({ searchParams }: DashboardProps) {
             <article className="project-card" key={project.slug}>
               <div className="project-icon">{project.name.slice(0, 1).toUpperCase()}</div>
               <div>
-                <div className="project-title-row"><h3>{project.name}</h3><span className={`project-state ${isPublished ? "live" : "setup"}`}>{isPublished ? "Live" : "Setup"}</span></div>
+                <div className="project-title-row"><h3>{project.name}</h3><span className={`project-state ${isPublished ? "live" : "setup"}`}>{isPublished ? "Live" : "Setup"}</span><span className={`project-state ${project.visibility}`}>{project.visibility}</span>{project.pendingProposals > 0 && <span className="project-state proposals">{project.pendingProposals} proposals</span>}</div>
                 <p>{project.slug}.{env.SMOLIFY_ROOT_DOMAIN}</p>
               </div>
               <div className="project-actions">
                 {isPublished
-                  ? <a href={`https://${project.slug}.${env.SMOLIFY_ROOT_DOMAIN}`}>View docs ↗</a>
+                  ? project.visibility === "public"
+                    ? <a href={`https://${project.slug}.${env.SMOLIFY_ROOT_DOMAIN}`}>View docs ↗</a>
+                    : <Link href={`/${project.slug}/introduction`}>View private docs →</Link>
                   : <Link href={`/dashboard?project=${project.slug}#setup`}>Continue setup →</Link>}
+                <ProjectVisibilityControl project={project.slug} visibility={project.visibility} />
                 <CustomDomainControl
                   project={project.slug}
                   initialDomain={project.domainId && project.hostname && project.domainStatus ? {

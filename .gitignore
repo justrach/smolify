@@ -1,0 +1,9 @@
+node_modules/
+.next/
+.open-next/
+.wrangler/
+.dev.vars
+*.tsbuildinfo
+coverage/
+.DS_Store
+codedb.snapshot

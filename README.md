@@ -109,15 +109,22 @@ Open:
 From the dashboard, choose **Import a repository**:
 
 - Paste a public GitHub repository root URL. Smolify reads a bounded tree plus
-  high-value files such as README, package manifests, and API contracts.
+  up to 30,000 supported text paths, a balanced set of first-party guides, and
+  representative app/package/extension READMEs. Imported guide content is
+  capped at 8 MB and fetched in bounded batches.
 - Upload a ZIP for a private repository. ZIPs are limited to 12 MB compressed,
   30 MB expanded, 4,000 entries, and supported text files. Source is analyzed
   in memory; only the generated Markdown bundle and source paths are retained.
 - Choose **Public** to list the page in Explore and accept community agent
   reviews, or **Private** to require workspace membership everywhere.
 
-The instant scaffold deliberately avoids inventing behavior. Run the Codex
-skill in the actual repository to turn it into full API documentation.
+The instant scaffold includes the README introduction, package-derived setup,
+source-grounded guide pages, and chunked file-index pages searchable through
+D1 FTS5/BM25. It deliberately avoids inventing behavior. Run the Codex skill
+in the actual repository to turn the scaffold into reviewed API documentation.
+
+Production: <https://app.smol.ly>. The large-repository fixture is
+<https://app.smol.ly/explore/openclaw>.
 
 GitHub OAuth is optional. If enabled, add its client ID and secret to
 `.dev.vars` and register this callback:

@@ -39,6 +39,7 @@ export default async function DashboardPage({ searchParams }: DashboardProps) {
     ?? projects.find((project) => !project.activeDeploymentId)
     ?? projects[0];
   const publishedCount = projects.filter((project) => project.activeDeploymentId).length;
+  const appUrl = env.BETTER_AUTH_URL.replace(/\/$/, "");
   const proposals = selectedProject
     ? await listProjectProposals(env, selectedProject.id)
     : [];
@@ -92,12 +93,12 @@ export default async function DashboardPage({ searchParams }: DashboardProps) {
               <div className="project-icon">{project.name.slice(0, 1).toUpperCase()}</div>
               <div>
                 <div className="project-title-row"><h3>{project.name}</h3><span className={`project-state ${isPublished ? "live" : "setup"}`}>{isPublished ? "Live" : "Setup"}</span><span className={`project-state ${project.visibility}`}>{project.visibility}</span>{project.pendingProposals > 0 && <span className="project-state proposals">{project.pendingProposals} proposals</span>}</div>
-                <p>{project.slug}.{env.SMOLIFY_ROOT_DOMAIN}</p>
+                <p>{new URL(appUrl).host}/{project.slug}</p>
               </div>
               <div className="project-actions">
                 {isPublished
                   ? project.visibility === "public"
-                    ? <a href={`https://${project.slug}.${env.SMOLIFY_ROOT_DOMAIN}`}>View docs ↗</a>
+                    ? <a href={`${appUrl}/${project.slug}/introduction`}>View docs ↗</a>
                     : <Link href={`/${project.slug}/introduction`}>View private docs →</Link>
                   : <Link href={`/dashboard?project=${project.slug}#setup`}>Continue setup →</Link>}
                 <ProjectVisibilityControl project={project.slug} visibility={project.visibility} />

@@ -6,6 +6,12 @@
   "compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
   "workers_dev": true,
   "preview_urls": false,
+  "routes": [
+    {
+      "pattern": "app.smol.ly",
+      "custom_domain": true
+    }
+  ],
   "assets": {
     "directory": ".open-next/assets",
     "binding": "ASSETS"
@@ -14,7 +20,7 @@
     {
       "binding": "DB",
       "database_name": "smolify-db",
-      "database_id": "REPLACE_WITH_D1_DATABASE_ID",
+      "database_id": "6627f9f5-6c6a-483f-b7a6-e9547837c425",
       "migrations_dir": "migrations"
     }
   ],
@@ -27,6 +33,30 @@
   "vars": {
     "SMOLIFY_ROOT_DOMAIN": "smol.ly",
     "BETTER_AUTH_URL": "https://app.smol.ly"
+  },
+  "env": {
+    "local": {
+      "name": "smolify-local",
+      "routes": [],
+      "d1_databases": [
+        {
+          "binding": "DB",
+          "database_name": "smolify-db",
+          "database_id": "6627f9f5-6c6a-483f-b7a6-e9547837c425",
+          "migrations_dir": "migrations"
+        }
+      ],
+      "r2_buckets": [
+        {
+          "binding": "DOCS",
+          "bucket_name": "smolify-docs"
+        }
+      ],
+      "vars": {
+        "SMOLIFY_ROOT_DOMAIN": "smol.ly",
+        "BETTER_AUTH_URL": "http://localhost:8787"
+      }
+    }
   },
   "observability": { "enabled": true }
 }

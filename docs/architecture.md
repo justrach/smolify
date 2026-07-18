@@ -28,9 +28,11 @@ customer OpenAI API key.
   publish-token hashes.
 - R2 stores immutable bundle versions and generated assets under
   `projects/{projectId}/deployments/{deploymentId}/...`.
-- A custom Cloudflare Worker entry resolves `project.smol.ly` and active
+- A custom Cloudflare Worker entry can resolve `project.smol.ly` and active
   D1-backed custom hostnames into the tenant route before calling the generated
-  OpenNext handler. A Cloudflare for SaaS adapter creates hostnames, persists
+  OpenNext handler. The current production deployment uses stable
+  `app.smol.ly/{project}/...` paths until a proxied wildcard DNS route is added.
+  A Cloudflare for SaaS adapter creates customer hostnames, persists
   DNS/certificate validation instructions, and synchronizes activation status.
 - Documentation generation happens in Codex. A future Queue/Workflow may run
   indexing or post-publish checks; it is separate from OpenNext ISR queues.
@@ -38,14 +40,18 @@ customer OpenAI API key.
 ## Repository import boundary
 
 Public GitHub import accepts only a repository-root URL. It reads repository
-metadata, a bounded file tree, and a small allowlist of useful text files. ZIP
-upload enforces compressed, expanded, entry-count, per-file, and decoded-byte
-limits; path traversal and generated dependency/build directories are ignored.
+metadata, up to 30,000 balanced supported text paths, up to 132 balanced
+first-party guides, and up to 24 ecosystem READMEs. Fetched content is capped
+at 8 MB and read in batches of eight. ZIP upload enforces compressed, expanded,
+entry-count, per-file, and decoded-byte limits; path traversal and generated
+dependency/build directories are ignored.
 
-The deterministic importer emits an introduction, repository map, and optional
-package-derived development page. It never claims inferred runtime behavior.
-README/package content and source paths may appear in the generated docs bundle;
-the source archive and arbitrary source contents are not retained.
+The deterministic importer emits an introduction, balanced repository map,
+optional package-derived development page, source-grounded guide pages, and
+chunked file-index pages. Every page is schema-bounded and unsafe HTML schemes
+are escaped before storage. It never claims inferred runtime behavior.
+README/package/guide content and source paths may appear in the generated docs
+bundle; the source archive and arbitrary source contents are not retained.
 
 ## Rendering boundary
 

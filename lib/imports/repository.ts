@@ -18,6 +18,13 @@ export type RepositorySnapshot = {
 const TEXT_FILE = /(?:^|\/)(?:readme(?:\.[a-z0-9]+)?|license(?:\.[a-z0-9]+)?|dockerfile|gemfile|makefile)$|\.(?:md|mdx|txt|json|ya?ml|toml|ini|conf|xml|graphql|gql|proto|ts|tsx|js|jsx|mjs|cjs|py|rb|rs|go|java|kt|kts|swift|php|cs|c|cc|cpp|h|hpp|sh|sql)$/i;
 const CONTENT_PRIORITY = /(?:^|\/)(?:readme(?:\.[a-z0-9]+)?|package\.json|pyproject\.toml|cargo\.toml|go\.mod|composer\.json|gemfile|openapi\.(?:json|ya?ml)|swagger\.(?:json|ya?ml)|schema\.graphql)$/i;
 const IGNORED_PATH = /(?:^|\/)(?:\.git|node_modules|vendor|dist|build|coverage|\.next|\.open-next|target|__pycache__)(?:\/|$)/i;
+const IMPORTED_DOCUMENT = /\.(?:md|mdx)$/i;
+const LOW_VALUE_DOCUMENT_PATH = /(?:^|\/)(?:\.i18n|assets?|images?|snippets?|\.generated)(?:\/|$)/i;
+const MAX_GITHUB_PATHS = 30_000;
+const MAX_GITHUB_DOCUMENTS = 180;
+const MAX_GITHUB_CONTENT_BYTES = 8 * 1024 * 1024;
+
+type GithubTreeBlob = { path: string; type: "blob"; size?: number };
 
 function cleanPath(path: string) {
   return path.replace(/\\/g, "/").replace(/^\.\//, "").replace(/^\/+/, "");
@@ -41,7 +48,104 @@ function inline(value: string) {
 }
 
 function truncate(value: string, length: number) {
-  return value.length <= length ? value : `${value.slice(0, length)}\n\n…truncated by Smolify import.`;
+  if (value.length <= length) return value;
+  const marker = "\n\n…truncated by Smolify import.";
+  return `${value.slice(0, Math.max(0, length - marker.length))}${marker}`;
+}
+
+function safeImportedMarkdown(value: string) {
+  return value
+    .replace(/<script\b/gi, "&lt;script")
+    .replace(/<\/script>/gi, "&lt;/script>")
+    .replace(/<iframe\b/gi, "&lt;iframe")
+    .replace(/<\/iframe>/gi, "&lt;/iframe>")
+    .replace(/javascript:/gi, "javascript&#58;");
+}
+
+function balancedTake<T>(items: T[], limit: number, groupFor: (item: T) => string) {
+  if (items.length <= limit) return items;
+  const groups = new Map<string, T[]>();
+  for (const item of items) {
+    const group = groupFor(item);
+    const bucket = groups.get(group) ?? [];
+    bucket.push(item);
+    groups.set(group, bucket);
+  }
+  const selected: T[] = [];
+  for (let index = 0; selected.length < limit; index += 1) {
+    let added = false;
+    for (const bucket of groups.values()) {
+      const item = bucket[index];
+      if (!item) continue;
+      selected.push(item);
+      added = true;
+      if (selected.length === limit) break;
+    }
+    if (!added) break;
+  }
+  return selected;
+}
+
+function topLevel(path: string) {
+  const [first, second] = cleanPath(path).split("/");
+  if (!second) return "root";
+  return first || "root";
+}
+
+function documentationGroup(path: string) {
+  const parts = cleanPath(path).split("/");
+  return parts[0]?.toLowerCase() === "docs"
+    ? `docs/${parts[1] ?? "root"}`
+    : `${parts[0] ?? "root"}/${parts[1] ?? "root"}`;
+}
+
+function isImportableDocument(path: string) {
+  const normalized = cleanPath(path);
+  if (!IMPORTED_DOCUMENT.test(normalized) || LOW_VALUE_DOCUMENT_PATH.test(normalized)) return false;
+  const lower = normalized.toLowerCase();
+  if (lower === "readme.md" || lower === "readme.mdx" || lower === "changelog.md") return false;
+  if (!normalized.includes("/")) return true;
+  return /^(?:docs?|guides?|manual)\//i.test(normalized)
+    || /^(?:apps?|packages?|extensions?|plugins?|examples?)\/[^/]+\/readme\.(?:md|mdx)$/i.test(normalized);
+}
+
+function selectGithubContentCandidates(blobs: GithubTreeBlob[]) {
+  const rootPriority = blobs.filter((entry) =>
+    !cleanPath(entry.path).includes("/")
+    && (CONTENT_PRIORITY.test(entry.path) || isImportableDocument(entry.path))
+    && (entry.size ?? 0) <= 400_000,
+  );
+  const primaryDocuments = blobs
+    .filter((entry) =>
+      /^(?:docs?|guides?|manual)\//i.test(cleanPath(entry.path))
+      && isImportableDocument(entry.path)
+      && (entry.size ?? 0) <= 240_000,
+    )
+    .sort((a, b) => {
+      const priority = (path: string) => Number(/(?:^|\/)(?:index|overview|getting-started|quickstart|installation|authentication|configuration|security|api|architecture)\.(?:md|mdx)$/i.test(path));
+      return priority(b.path) - priority(a.path) || a.path.localeCompare(b.path);
+    });
+  const ecosystemDocuments = blobs.filter((entry) =>
+    !/^(?:docs?|guides?|manual)\//i.test(cleanPath(entry.path))
+    && cleanPath(entry.path).includes("/")
+    && isImportableDocument(entry.path)
+    && (entry.size ?? 0) <= 240_000,
+  );
+  const balancedPrimaryDocuments = balancedTake(
+    primaryDocuments,
+    132,
+    (entry) => documentationGroup(entry.path),
+  );
+  const balancedEcosystemDocuments = balancedTake(
+    ecosystemDocuments,
+    24,
+    (entry) => topLevel(entry.path),
+  );
+  const selected = new Map<string, GithubTreeBlob>();
+  for (const entry of [...rootPriority, ...balancedPrimaryDocuments, ...balancedEcosystemDocuments]) {
+    selected.set(entry.path, entry);
+  }
+  return [...selected.values()];
 }
 
 function findContent(files: RepositoryFile[], pattern: RegExp) {
@@ -78,7 +182,8 @@ function packageDevelopment(files: RepositoryFile[]) {
 }
 
 function categorizedPaths(files: RepositoryFile[]) {
-  const paths = files.map((file) => file.path).filter(safePath).slice(0, 500);
+  const allPaths = [...new Set(files.map((file) => file.path).filter(safePath))].sort();
+  const paths = balancedTake(allPaths, 500, topLevel);
   const groups = [
     ["API contracts", /(?:openapi|swagger|graphql|\.proto$|schema)/i],
     ["Tests", /(?:^|\/)(?:test|tests|spec|__tests__)(?:\/|\.)|\.(?:test|spec)\./i],
@@ -97,6 +202,138 @@ function categorizedPaths(files: RepositoryFile[]) {
   const other = paths.filter((path) => !used.has(path)).slice(0, 100);
   if (other.length) sections.push("## Other files", "", ...other.map((path) => `- \`${path}\``), "");
   return truncate(sections.join("\n"), 120_000);
+}
+
+function slugSegment(value: string) {
+  return value
+    .toLowerCase()
+    .replace(/\.(?:md|mdx)$/i, "")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "") || "page";
+}
+
+function compactHash(value: string) {
+  let hash = 2166136261;
+  for (let index = 0; index < value.length; index += 1) {
+    hash ^= value.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return (hash >>> 0).toString(36);
+}
+
+function uniquePageSlug(path: string, prefix: string, used: Set<string>) {
+  let cleaned = cleanPath(path).replace(/\/(?:readme\.(?:md|mdx))$/i, "");
+  if (prefix === "docs") cleaned = cleaned.replace(/^(?:docs?|guides?|manual)\//i, "");
+  const parts = cleaned.split("/").filter(Boolean).map(slugSegment);
+  let base = `${prefix}/${parts.join("/") || "overview"}`;
+  if (base.length > 150) base = `${base.slice(0, 140).replace(/\/$/, "")}-${compactHash(path)}`;
+  let candidate = base;
+  for (let suffix = 2; used.has(candidate); suffix += 1) candidate = `${base}-${suffix}`;
+  used.add(candidate);
+  return candidate;
+}
+
+function plainMarkdown(value: string) {
+  return value
+    .replace(/<[^>]+>/g, " ")
+    .replace(/!\[[^\]]*\]\([^)]*\)/g, " ")
+    .replace(/\[([^\]]+)\]\([^)]*\)/g, "$1")
+    .replace(/[`*_>#~|]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function documentFrontmatter(markdown: string) {
+  const match = markdown.match(/^---\s*\n([\s\S]*?)\n---\s*(?:\n|$)/);
+  if (!match) return { body: markdown, title: "", summary: "" };
+  const value = (key: string) => {
+    const raw = match[1].match(new RegExp(`^${key}:\\s*(.+)$`, "mi"))?.[1]?.trim() ?? "";
+    return raw.replace(/^(?:"([\s\S]*)"|'([\s\S]*)')$/, "$1$2").trim();
+  };
+  return {
+    body: markdown.slice(match[0].length),
+    title: value("title"),
+    summary: value("summary"),
+  };
+}
+
+function documentTitle(path: string, markdown: string) {
+  const parsed = documentFrontmatter(markdown);
+  if (parsed.title) return truncate(plainMarkdown(parsed.title), 120);
+  const withoutCodeFences = parsed.body.replace(/```[\s\S]*?```/g, "");
+  const heading = withoutCodeFences.match(/^#\s+(.+)$/m)?.[1];
+  if (heading) return truncate(plainMarkdown(heading), 120);
+  const name = cleanPath(path).split("/").at(-1)?.replace(/\.(?:md|mdx)$/i, "") ?? "Documentation";
+  return truncate(name.split(/[-_]+/).map((part) => `${part.slice(0, 1).toUpperCase()}${part.slice(1)}`).join(" "), 120);
+}
+
+function documentDescription(path: string, markdown: string) {
+  const parsed = documentFrontmatter(markdown);
+  if (parsed.summary) return truncate(plainMarkdown(parsed.summary), 240);
+  const paragraph = parsed.body
+    .split(/\n\s*\n/)
+    .map(plainMarkdown)
+    .find((value) => value.length >= 24 && !/^https?:\/\//i.test(value));
+  return truncate(paragraph || `Repository documentation imported from ${path}.`, 240);
+}
+
+function documentationPages(files: RepositoryFile[], used: Set<string>) {
+  return files
+    .filter((file) => file.content && isImportableDocument(file.path))
+    .slice(0, MAX_GITHUB_DOCUMENTS)
+    .map((file): DocsPage => {
+      const markdown = file.content ?? "";
+      const body = documentFrontmatter(markdown).body.trim() || markdown;
+      return {
+        slug: uniquePageSlug(file.path, "docs", used),
+        title: documentTitle(file.path, markdown),
+        description: documentDescription(file.path, markdown),
+        markdown: truncate(`${body}\n\n---\n\n_Source: \`${file.path.replace(/`/g, "\\`")}\`_`, 240_000),
+        sourceFiles: [file.path],
+      };
+    });
+}
+
+function fileIndexPages(files: RepositoryFile[], used: Set<string>) {
+  const groups = new Map<string, string[]>();
+  for (const path of [...new Set(files.map((file) => cleanPath(file.path)).filter(safePath))].sort()) {
+    const group = topLevel(path);
+    const paths = groups.get(group) ?? [];
+    paths.push(path);
+    groups.set(group, paths);
+  }
+  const pages: DocsPage[] = [];
+  for (const [group, paths] of groups) {
+    const pageCount = Math.ceil(paths.length / 650);
+    for (let offset = 0; offset < paths.length && pages.length < 120; offset += 650) {
+      const chunk = paths.slice(offset, offset + 650);
+      const pageNumber = Math.floor(offset / 650) + 1;
+      const label = group === "root" ? "Repository root" : group;
+      const suffix = pageCount > 1 ? ` (${pageNumber}/${pageCount})` : "";
+      const virtualPath = `${group}${pageCount > 1 ? `-${pageNumber}` : ""}`;
+      pages.push({
+        slug: uniquePageSlug(virtualPath, "files", used),
+        title: truncate(`Files: ${label}${suffix}`, 120),
+        description: `${chunk.length} indexed repository paths from ${label}.`,
+        markdown: truncate([
+          `# ${label} files${suffix}`,
+          "",
+          `This index covers ${chunk.length} source-grounded paths. Search matches file and directory names through D1 FTS5/BM25.`,
+          "",
+          ...chunk.map((path) => `- \`${path.replace(/`/g, "\\`")}\``),
+        ].join("\n"), 240_000),
+        sourceFiles: chunk.slice(0, 100),
+      });
+    }
+  }
+  return pages;
+}
+
+function navigationGroup(label: string, pages: DocsPage[]) {
+  return {
+    label,
+    items: pages.map((page) => ({ label: page.title, slug: page.slug })),
+  };
 }
 
 export function buildRepositoryBundle(snapshot: RepositorySnapshot): DocsBundle {
@@ -135,7 +372,7 @@ export function buildRepositoryBundle(snapshot: RepositorySnapshot): DocsBundle 
       : "Connect the Smolify MCP in the source repository and ask `$smolify-api-docs` to generate reviewed API documentation.",
   ].join("\n");
 
-  const pages: DocsPage[] = [
+  const corePages: DocsPage[] = [
     {
       slug: "introduction",
       title: snapshot.name,
@@ -153,13 +390,36 @@ export function buildRepositoryBundle(snapshot: RepositorySnapshot): DocsBundle 
   ];
   const development = packageDevelopment(files);
   if (development) {
-    pages.push({
+    corePages.push({
       slug: "development",
       title: "Development",
       description: "Runtime requirements, package scripts, and notable dependencies.",
       markdown: development,
-      sourceFiles: files.filter((file) => /(?:^|\/)package\.json$/i.test(file.path)).map((file) => file.path),
+      sourceFiles: files
+        .filter((file) => /(?:^|\/)package\.json$/i.test(file.path))
+        .map((file) => file.path)
+        .slice(0, 100),
     });
+  }
+  const used = new Set(corePages.map((page) => page.slug));
+  const importedPages = documentationPages(files, used);
+  const indexedFilePages = fileIndexPages(files, used);
+  const pages = [...corePages, ...importedPages, ...indexedFilePages].map((page) => ({
+    ...page,
+    markdown: safeImportedMarkdown(page.markdown),
+  }));
+  const navigation = [navigationGroup("Repository", corePages)];
+  for (let offset = 0; offset < importedPages.length; offset += 100) {
+    navigation.push(navigationGroup(
+      importedPages.length > 100 ? `Repository docs ${Math.floor(offset / 100) + 1}` : "Repository docs",
+      importedPages.slice(offset, offset + 100),
+    ));
+  }
+  for (let offset = 0; offset < indexedFilePages.length; offset += 100) {
+    navigation.push(navigationGroup(
+      indexedFilePages.length > 100 ? `File index ${Math.floor(offset / 100) + 1}` : "File index",
+      indexedFilePages.slice(offset, offset + 100),
+    ));
   }
 
   return {
@@ -167,10 +427,7 @@ export function buildRepositoryBundle(snapshot: RepositorySnapshot): DocsBundle 
     project: { name: snapshot.name, description, accent: "#7467F0" },
     generatedAt: new Date().toISOString(),
     generator: { name: "smolify", model: "deterministic-repository-import-v1" },
-    navigation: [{
-      label: "Repository",
-      items: pages.map((page) => ({ label: page.title, slug: page.slug })),
-    }],
+    navigation,
     pages,
   };
 }
@@ -222,24 +479,29 @@ export async function fetchGithubSnapshot(value: string): Promise<RepositorySnap
     truncated: boolean;
     tree: Array<{ path: string; type: "blob" | "tree"; size?: number }>;
   }>(`https://api.github.com/repos/${parsed.owner}/${parsed.repository}/git/trees/${encodeURIComponent(repository.default_branch)}?recursive=1`);
-  const blobs = tree.tree
-    .filter((entry) => entry.type === "blob" && safePath(entry.path) && TEXT_FILE.test(entry.path))
-    .slice(0, 2_000);
-  const contentCandidates = blobs
-    .filter((entry) => CONTENT_PRIORITY.test(entry.path) && (entry.size ?? 0) <= 400_000)
-    .sort((a, b) => Number(/readme/i.test(b.path)) - Number(/readme/i.test(a.path)))
-    .slice(0, 24);
+  const allBlobs = tree.tree
+    .filter((entry): entry is GithubTreeBlob => entry.type === "blob" && safePath(entry.path) && TEXT_FILE.test(entry.path));
+  const blobs = balancedTake(allBlobs, MAX_GITHUB_PATHS, (entry) => topLevel(entry.path));
+  const contentCandidates = selectGithubContentCandidates(allBlobs);
 
   const contents = new Map<string, string>();
-  await Promise.all(contentCandidates.map(async (entry) => {
-    const rawPath = entry.path.split("/").map(encodeURIComponent).join("/");
-    const response = await fetch(
-      `https://raw.githubusercontent.com/${parsed.owner}/${parsed.repository}/${encodeURIComponent(repository.default_branch)}/${rawPath}`,
-      { headers: { "user-agent": "smolify-repository-importer" } },
-    );
-    if (!response.ok) return;
-    contents.set(entry.path, truncate(await response.text(), 400_000));
-  }));
+  let remainingContentBytes = MAX_GITHUB_CONTENT_BYTES;
+  for (let offset = 0; offset < contentCandidates.length && remainingContentBytes > 0; offset += 8) {
+    const batch = await Promise.all(contentCandidates.slice(offset, offset + 8).map(async (entry) => {
+      const rawPath = entry.path.split("/").map(encodeURIComponent).join("/");
+      const response = await fetch(
+        `https://raw.githubusercontent.com/${parsed.owner}/${parsed.repository}/${encodeURIComponent(repository.default_branch)}/${rawPath}`,
+        { headers: { "user-agent": "smolify-repository-importer" } },
+      );
+      if (!response.ok) return null;
+      return { path: entry.path, bytes: new Uint8Array(await response.arrayBuffer()) };
+    }));
+    for (const result of batch) {
+      if (!result || result.bytes.byteLength > remainingContentBytes) continue;
+      remainingContentBytes -= result.bytes.byteLength;
+      contents.set(result.path, truncate(new TextDecoder().decode(result.bytes), 400_000));
+    }
+  }
 
   return {
     name: repository.name,

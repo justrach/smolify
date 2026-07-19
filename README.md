@@ -44,7 +44,9 @@ The brand guide, voice, colors, and usage rules live in
 
 ## Architecture
 
-See [docs/architecture.md](docs/architecture.md). The short version is:
+See [docs/architecture.md](docs/architecture.md) for the system boundaries and
+[walkthrough.md](walkthrough.md) for the user-device onboarding, GitHub
+credential decision, bundle review, and indexing sequence. The short version is:
 
 ```text
 API repository

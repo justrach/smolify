@@ -1,17 +1,60 @@
 # Smolify
 
-Smolify is a Codex-native, open-source API documentation platform. A repository
-skill asks Codex to analyze the actual API implementation, writes reviewable
-Markdown into a versioned bundle, and publishes it to a hosted docs experience.
+> Your code knows the truth. Codex turns it into docs.
 
-Smolify does not use Fumadocs and does not execute runtime MDX.
+API documentation drifts when it is written somewhere away from the code.
+Routes change, authentication rules evolve, examples stop compiling, and the
+docs quietly become a liability.
 
-Production control plane: <https://app.smol.ly>
+Smolify keeps documentation inside the development loop. Codex reads the actual
+API implementation on your device, reconciles routes with schemas, middleware,
+tests, and examples, then writes safe Markdown into a versioned bundle. You
+review the Git diff. Only then can Codex publish through Smolify's authenticated
+MCP.
 
-**Tiny setup. Serious docs.** The product origin is `smol.ly`; hosted projects
-use `{project}.smol.ly`, and teams can attach their own custom domain.
+The result is one documentation system with two useful interfaces: a polished
+website for people and precise search and retrieval tools for coding agents.
 
-## What works
+**Tiny setup. Serious docs.**
+
+[Live app](https://app.smol.ly) ·
+[Public docs demo](https://app.smol.ly/pawprint/introduction) ·
+[Large repository example](https://app.smol.ly/explore/openclaw) ·
+[Architecture](docs/architecture.md) ·
+[Onboarding walkthrough](walkthrough.md)
+
+Smolify is open source and was built for OpenAI Build Week with GPT-5.6 and
+Codex. It uses an original Next.js renderer, does not use Fumadocs, and never
+executes runtime MDX. The product origin is `smol.ly`, hosted projects can use
+`{project}.smol.ly`, and teams can attach their own custom domain.
+
+## From repository to hosted docs
+
+1. **Connect your agent.** Install the remote MCP and repository skill with one
+   command.
+2. **Generate locally.** Codex reads the checkout on your device and produces
+   `.smolify/smolify.bundle.json`. Smolify does not need the raw repository.
+3. **Review the evidence.** Every page can cite its supporting source files, and
+   the complete bundle remains a normal Git diff until you approve it.
+4. **Publish deliberately.** OAuth authorizes a project-scoped MCP call. The
+   server validates the full bundle before atomically activating it.
+5. **Use the docs everywhere.** People browse the hosted site. Agents search the
+   same deployment with bounded BM25 results and retrieve only relevant pages.
+
+```bash
+bunx smoly install --agent codex
+codex mcp login smolify
+```
+
+Then open the API repository in Codex and ask:
+
+```text
+Use $smolify-api-docs to document this API. Reconcile the implementation with
+routes, schemas, authentication, tests, and examples. Generate and validate the
+bundle, show me the complete diff, and stop before publishing.
+```
+
+## What you get
 
 - Original Next.js documentation UI and Markdown rendering pipeline
 - Strict runtime bundle validation and sanitized HTML output

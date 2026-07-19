@@ -6,7 +6,7 @@ Markdown into a versioned bundle, and publishes it to a hosted docs experience.
 
 Smolify does not use Fumadocs and does not execute runtime MDX.
 
-Planned control plane: <https://app.smol.ly>
+Production control plane: <https://app.smol.ly>
 
 **Tiny setup. Serious docs.** The product origin is `smol.ly`; hosted projects
 use `{project}.smol.ly`, and teams can attach their own custom domain.
@@ -20,12 +20,14 @@ use `{project}.smol.ly`, and teams can attach their own custom domain.
 - Project-scoped publish tokens stored as SHA-256 hashes
 - Immutable documentation bundles stored in R2
 - D1 FTS5/BM25 search tuned for API identifiers and bounded agent results
-- A production remote MCP with OAuth 2.1 discovery, dynamic client registration,
-  authorization-code + PKCE, consent, refresh tokens, and scoped tools
+- A production remote MCP with anonymous public discovery/search plus OAuth 2.1
+  for private projects and write tools
 - A small TypeScript SDK for CI and other agents
 - Cloudflare for SaaS custom-hostname onboarding, validation status, and routing
 - OpenNext build targeting Cloudflare Workers
-- Installable `smolify-api-docs` Codex skill with validation and publishing scripts
+- Installable `smolify-api-docs` Agent Skill with validation and publishing scripts
+- A dependency-free Bun/TypeScript `smoly` installer using the additive
+  `mcpsync` configuration model
 - Guided, per-project onboarding for MCP authorization, skill installation, and first publish
 - One-field public GitHub import and bounded private repository ZIP upload
 - An immediate repository page, file map, and package-derived development page
@@ -131,15 +133,52 @@ GitHub OAuth is optional. If enabled, add its client ID and secret to
 
 ```text
 http://localhost:8787/api/auth/callback/github
+https://app.smol.ly/api/auth/callback/github
 ```
+
+Authenticated GitHub imports use the signed-in user's API quota. A
+`GITHUB_TOKEN` Worker secret is an optional shared fallback for server-side
+imports, but per-user OAuth avoids putting every import on one account's
+rate limit.
+
+## Trust and source provenance
+
+Smolify shows independent signals instead of collapsing them into a vague
+"safe" badge:
+
+- **Official source** means the repository is directly owned by a curated
+  company or standards-body GitHub organization. The registry is keyed by
+  GitHub's immutable numeric owner ID, so a renamed or lookalike account does
+  not inherit the badge.
+- **Community reviewed** requires ratings from ten independent identities with
+  GitHub or verified-email assurance. One account can contribute at most one
+  review per project.
+- Neither signal is a security audit. Official provenance identifies where the
+  source came from; community review describes the generated documentation.
 
 ## Connect Codex and install the skill
 
-Connect the remote MCP once. Codex opens the OAuth flow in your browser; no API
-key is pasted into chat or stored in the repository.
+Public repository discovery, structure, search, and page reads need no account.
+OAuth starts only when an agent needs private docs or a write tool; no API key
+is pasted into chat or stored in the repository.
+
+The cross-agent installer writes the additive `smolify` entry to
+`~/.mcpconfig.json`, syncs detected agent configs, and installs the shared skill
+at `~/.agents/skills/smolify-api-docs`:
+
+```bash
+bunx smoly install
+```
+
+Or configure Codex directly:
 
 ```bash
 codex mcp add smolify --url https://app.smol.ly/mcp
+```
+
+Authorize Codex when you want to contribute, read a private project, or publish:
+
+```bash
 codex mcp login smolify
 ```
 
@@ -154,15 +193,15 @@ into this repository.
 Or install it directly:
 
 ```bash
-npx degit justrach/smolify/skills/smolify-api-docs .codex/skills/smolify-api-docs
+npx degit justrach/smolify/skills/smolify-api-docs .agents/skills/smolify-api-docs
 ```
 
 For local development of this repository, you can also copy the checked-in
 skill into another API repository:
 
 ```bash
-mkdir -p /path/to/api/.codex/skills
-cp -R skills/smolify-api-docs /path/to/api/.codex/skills/smolify-api-docs
+mkdir -p /path/to/api/.agents/skills
+cp -R skills/smolify-api-docs /path/to/api/.agents/skills/smolify-api-docs
 ```
 
 Then open that repository in Codex and ask:
@@ -181,8 +220,9 @@ The skill never prints a token.
 
 ### Community agent review
 
-An authenticated GPT-5.6 agent can call `discover_public_projects`, search and
-read a project, then call `rate_docs`. A complete improvement can be submitted
+Any agent can call `discover_public_projects`, `read_docs_structure`,
+`search_docs`, and `get_doc_page` for a public project. An authenticated
+GPT-5.6 agent can then call `rate_docs`. A complete improvement can be submitted
 with `propose_doc_improvement`; this stores an immutable pending bundle and does
 not change the live docs. The owner must preview the complete bundle and send
 its SHA-256 review hash before **Accept and publish** is enabled.

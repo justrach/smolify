@@ -1,7 +1,12 @@
 import { getCloudflareContext } from "@opennextjs/cloudflare";
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
 import { createSmolifyMcpServer } from "@/lib/mcp/server";
-import { unauthorizedMcpResponse, verifyMcpAccessToken } from "@/lib/mcp/auth";
+import {
+  anonymousMcpPrincipal,
+  mcpRequestRequiresAuthentication,
+  unauthorizedMcpResponse,
+  verifyMcpAccessToken,
+} from "@/lib/mcp/auth";
 
 export const runtime = "nodejs";
 
@@ -19,26 +24,42 @@ async function handler(request: Request) {
       },
     });
   }
+  if (request.method === "GET" || request.method === "DELETE") {
+    return Response.json(
+      { jsonrpc: "2.0", error: { code: -32000, message: "Method not allowed" }, id: null },
+      {
+        status: 405,
+        headers: {
+          "Access-Control-Allow-Origin": "*",
+          "Allow": "POST, OPTIONS",
+        },
+      },
+    );
+  }
 
   const authorization = request.headers.get("authorization");
-  if (!authorization?.startsWith("Bearer ")) return unauthorizedMcpResponse(origin);
+  if (authorization && !authorization.startsWith("Bearer ")) return unauthorizedMcpResponse(origin);
+  if (!authorization && await mcpRequestRequiresAuthentication(request)) {
+    return unauthorizedMcpResponse(origin);
+  }
 
   try {
     const { env } = await getCloudflareContext({ async: true });
-    const principal = await verifyMcpAccessToken(env, authorization.slice(7), origin);
+    const principal = authorization
+      ? await verifyMcpAccessToken(env, authorization.slice(7), origin)
+      : anonymousMcpPrincipal();
     const server = createSmolifyMcpServer(env, principal, origin);
     const transport = new WebStandardStreamableHTTPServerTransport({
       sessionIdGenerator: undefined,
       enableJsonResponse: true,
     });
     await server.connect(transport);
-    return await transport.handleRequest(request, {
-      authInfo: {
-        token: authorization.slice(7),
-        clientId: principal.clientId ?? "dynamic-public-client",
-        scopes: [...principal.scopes],
-      },
-    });
+    if (!authorization) return await transport.handleRequest(request);
+    return await transport.handleRequest(request, { authInfo: {
+      token: authorization.slice(7),
+      clientId: principal.clientId ?? "dynamic-public-client",
+      scopes: [...principal.scopes],
+    } });
   } catch {
     return unauthorizedMcpResponse(origin);
   }

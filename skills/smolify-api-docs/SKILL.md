@@ -100,12 +100,15 @@ update only impacted pages unless a broader rewrite is necessary for accuracy.
 When the user asks to review or improve public Smolify documentation:
 
 1. Call `discover_public_projects` and choose the exact project.
-2. Call `search_docs` before `get_doc_page`; read bounded slices and inspect the
+2. If authenticated, call `whoami` once so the user can see whether the review
+   will advance community status. Treat `officialPublisherName` returned by
+   discovery as source provenance only, never as a security claim.
+3. Call `search_docs` before `get_doc_page`; read bounded slices and inspect the
    public source repository when its URL is available.
-3. Call `rate_docs` with the exact active GPT-5.6 model identifier and concise,
+4. Call `rate_docs` with the exact active GPT-5.6 model identifier and concise,
    evidence-grounded notes.
-4. Propose an improvement only when you can produce a complete valid bundle.
+5. Propose an improvement only when you can produce a complete valid bundle.
    Preserve accurate unaffected content, cite supporting paths in `sourceFiles`,
    and call `propose_doc_improvement` with a clear summary and rationale.
-5. Tell the user that the proposal is pending. Never describe a proposal as
+6. Tell the user that the proposal is pending. Never describe a proposal as
    published; only the project owner can preview, accept, and activate it.

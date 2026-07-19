@@ -8,12 +8,27 @@ export async function getDocsBundle(projectSlug: string): Promise<DocsBundle | n
   try {
     const { env } = await getCloudflareContext({ async: true });
     const project = await env.DB.prepare(
-      `SELECT id, active_deployment_id AS deploymentId
+      `SELECT projects.id, projects.name,
+         projects.active_deployment_id AS deploymentId,
+         intro.title AS introTitle,
+         intro.description AS introDescription,
+         intro.markdown AS introMarkdown
        FROM projects
-       WHERE slug = ? AND deleted_at IS NULL`,
+       LEFT JOIN doc_pages intro
+         ON intro.project_id = projects.id
+        AND intro.deployment_id = projects.active_deployment_id
+        AND intro.slug = 'introduction'
+       WHERE projects.slug = ? AND projects.deleted_at IS NULL`,
     )
       .bind(projectSlug)
-      .first<{ id: string; deploymentId: string | null }>();
+      .first<{
+        id: string;
+        name: string;
+        deploymentId: string | null;
+        introTitle: string | null;
+        introDescription: string | null;
+        introMarkdown: string | null;
+      }>();
 
     if (!project?.deploymentId) return null;
     const object = await env.DOCS.get(
@@ -21,7 +36,34 @@ export async function getDocsBundle(projectSlug: string): Promise<DocsBundle | n
     );
     if (!object) return null;
 
-    return docsBundleSchema.parse(await object.json());
+    const bundle = docsBundleSchema.parse(await object.json());
+    const intro = bundle.pages.find((page) => page.slug === "introduction");
+    if (!intro) return bundle;
+
+    const introTitle = project.introTitle || project.name || intro.title;
+    const introDescription = project.introDescription || bundle.project.description;
+    return {
+      ...bundle,
+      project: {
+        ...bundle.project,
+        name: project.name || bundle.project.name,
+        description: introDescription,
+      },
+      navigation: bundle.navigation.map((group) => ({
+        ...group,
+        items: group.items.map((item) => item.slug === "introduction"
+          ? { ...item, label: introTitle }
+          : item),
+      })),
+      pages: bundle.pages.map((page) => page.slug === "introduction"
+        ? {
+            ...page,
+            title: introTitle,
+            description: introDescription,
+            markdown: project.introMarkdown || page.markdown,
+          }
+        : page),
+    };
   } catch {
     // `next build` and the plain Next.js dev server may not have provisioned
     // Cloudflare bindings yet. Only the explicit demo project falls back.

@@ -1,11 +1,48 @@
 import { createLocalJWKSet, jwtVerify, type JWTPayload } from "jose";
 
 export type McpPrincipal = {
-  userId: string;
+  userId: string | null;
   clientId?: string;
   scopes: Set<string>;
-  token: JWTPayload;
+  token?: JWTPayload;
+  authenticated: boolean;
 };
+
+export const AUTHENTICATED_MCP_TOOLS = new Set([
+  "whoami",
+  "list_projects",
+  "rate_docs",
+  "propose_doc_improvement",
+  "publish_docs",
+]);
+
+export function anonymousMcpPrincipal(): McpPrincipal {
+  return {
+    userId: null,
+    scopes: new Set(["projects:read", "docs:read"]),
+    authenticated: false,
+  };
+}
+
+function messageRequiresAuthentication(value: unknown) {
+  if (!value || typeof value !== "object") return false;
+  const message = value as { method?: unknown; params?: { name?: unknown } };
+  return message.method === "tools/call"
+    && typeof message.params?.name === "string"
+    && AUTHENTICATED_MCP_TOOLS.has(message.params.name);
+}
+
+export async function mcpRequestRequiresAuthentication(request: Request) {
+  if (request.method !== "POST") return false;
+  try {
+    const payload = await request.clone().json() as unknown;
+    return Array.isArray(payload)
+      ? payload.some(messageRequiresAuthentication)
+      : messageRequiresAuthentication(payload);
+  } catch {
+    return false;
+  }
+}
 
 function claimScopes(payload: JWTPayload): Set<string> {
   const value = payload.scope ?? payload.scopes;
@@ -52,6 +89,7 @@ export async function verifyMcpAccessToken(
     clientId: typeof verified.payload.azp === "string" ? verified.payload.azp : undefined,
     scopes: claimScopes(verified.payload),
     token: verified.payload,
+    authenticated: true,
   };
 }
 
@@ -65,7 +103,11 @@ export function unauthorizedMcpResponse(origin: string) {
     },
     {
       status: 401,
-      headers: { "WWW-Authenticate": `Bearer resource_metadata="${metadata}"` },
+      headers: {
+        "Access-Control-Allow-Origin": "*",
+        "Access-Control-Expose-Headers": "WWW-Authenticate",
+        "WWW-Authenticate": `Bearer resource_metadata="${metadata}"`,
+      },
     },
   );
 }

@@ -1,0 +1,15 @@
+interface:
+  display_name: "Smolify API Docs"
+  short_description: "Generate and publish source-grounded API docs"
+  default_prompt: "Use $smolify-api-docs to document this repository, show me the generated diff, and wait before publishing."
+
+dependencies:
+  tools:
+    - type: "mcp"
+      value: "smolify"
+      description: "Search, review, and publish Smolify documentation"
+      transport: "streamable_http"
+      url: "https://app.smol.ly/mcp"
+
+policy:
+  allow_implicit_invocation: true

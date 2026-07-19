@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { docsBundleSchema, type DocsBundle } from "@/lib/docs/schema";
 import { publishDocsDeployment } from "@/lib/docs/deployments";
+import { getUserIdentity } from "@/lib/auth/identity";
 
 export const gpt56ModelSchema = z.string()
   .trim()
@@ -13,13 +14,16 @@ export async function rateProjectDocs(
 ) {
   const now = new Date().toISOString();
   const id = crypto.randomUUID();
+  const identityAssurance = (await getUserIdentity(env, input.userId))?.assurance ?? "account";
   await env.DB.prepare(
-    `INSERT INTO doc_ratings (id, project_id, user_id, score, notes, model, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `INSERT INTO doc_ratings (
+       id, project_id, user_id, score, notes, model, identity_assurance, created_at, updated_at
+     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT(project_id, user_id) DO UPDATE SET
        score = excluded.score,
        notes = excluded.notes,
        model = excluded.model,
+       identity_assurance = excluded.identity_assurance,
        updated_at = excluded.updated_at`,
   ).bind(
     id,
@@ -28,14 +32,16 @@ export async function rateProjectDocs(
     input.score,
     input.notes?.trim().slice(0, 2_000) || null,
     gpt56ModelSchema.parse(input.model),
+    identityAssurance,
     now,
     now,
   ).run();
 
   return env.DB.prepare(
-    `SELECT COALESCE(AVG(score), 0) AS average, COUNT(*) AS count
+    `SELECT COALESCE(AVG(score), 0) AS average, COUNT(*) AS count,
+       COALESCE(SUM(CASE WHEN identity_assurance IN ('verified_email', 'github') THEN 1 ELSE 0 END), 0) AS verifiedCount
      FROM doc_ratings WHERE project_id = ?`,
-  ).bind(input.projectId).first<{ average: number; count: number }>();
+  ).bind(input.projectId).first<{ average: number; count: number; verifiedCount: number }>();
 }
 
 export async function createImprovementProposal(

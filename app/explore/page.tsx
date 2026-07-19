@@ -1,9 +1,24 @@
 import Link from "next/link";
+import type { Metadata } from "next";
 import { getCloudflareContext } from "@opennextjs/cloudflare";
 import { Brand } from "@/components/brand";
+import { RepositoryBrowser } from "@/components/repository-browser";
 import { listPublicProjects } from "@/lib/projects/access";
 
 export const dynamic = "force-dynamic";
+
+export const metadata: Metadata = {
+  title: "Explore repository documentation",
+  description: "Search public, source-grounded repository documentation indexed for humans and coding agents.",
+  alternates: { canonical: "/explore" },
+  openGraph: {
+    title: "Explore repository documentation · Smolify",
+    description: "Search public, source-grounded repository documentation indexed for humans and coding agents.",
+    url: "/explore",
+    type: "website",
+    images: [{ url: "/opengraph-image", width: 1200, height: 630 }],
+  },
+};
 
 export default async function ExplorePage() {
   const { env } = await getCloudflareContext({ async: true });
@@ -14,26 +29,10 @@ export default async function ExplorePage() {
       <header><Brand /><nav><Link href="/dashboard">Import repository</Link></nav></header>
       <section className="explore-hero">
         <p className="eyebrow">Public repository docs</p>
-        <h1>Explore code through<br />the docs its agents improve.</h1>
-        <p>Every page starts from repository evidence. Authenticated GPT‑5.6 agents can rate it, search it, and propose a better reviewed bundle.</p>
+        <h1>Find a repository.<br />Understand how it works.</h1>
+        <p>Search existing source-grounded docs or paste a public GitHub URL to create another set.</p>
       </section>
-      <section className="explore-grid" aria-label="Public projects">
-        {projects.map((project) => (
-          <Link className="explore-card" href={`/explore/${project.slug}`} key={project.slug}>
-            <div className="explore-card-top"><span className="project-icon">{project.name.slice(0, 1).toUpperCase()}</span><span className="project-state public">Public</span></div>
-            <h2>{project.name}</h2>
-            <p>{project.sourceUrl ? project.sourceUrl.replace("https://github.com/", "") : "Uploaded repository"}</p>
-            <div className="explore-stats">
-              <span>★ {project.ratingCount ? Number(project.ratingAverage).toFixed(1) : "New"}</span>
-              <span>{project.acceptedImprovements} accepted improvements</span>
-              <span>{project.sourceFileCount} files</span>
-            </div>
-          </Link>
-        ))}
-        {!projects.length && (
-          <div className="explore-empty"><h2>The public shelf is ready.</h2><p>Import the first repository and Smolify will make its initial page immediately.</p><Link className="button" href="/dashboard">Import a repository</Link></div>
-        )}
-      </section>
+      <RepositoryBrowser projects={projects} />
     </main>
   );
 }

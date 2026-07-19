@@ -7,9 +7,9 @@ Smolify has five cooperating parts:
 1. A repository-local Codex skill analyzes an API and writes human-reviewed
    Markdown plus a versioned `smolify.bundle.json`. Codex already has local
    filesystem access; Smolify never needs it.
-2. A remote Smolify MCP server is the agent-facing control plane. Codex connects
-   over Streamable HTTP with OAuth, then publishes and searches through a small
-   set of bounded tools.
+2. A remote Smolify MCP server is the agent-facing control plane. Agents connect
+   over stateless Streamable HTTP. Public discovery and reads are anonymous;
+   OAuth is requested at the HTTP layer only for private or mutating tools.
 3. A TypeScript SDK exposes the same operations for CI and other agents.
 4. A hosted Next.js application validates bundles, stores immutable source in
    R2, indexes active pages in D1 FTS5, and renders a safe docs site.
@@ -70,13 +70,16 @@ Auth cookies remain host-only; cross-subdomain cookies are intentionally
 disabled so customer domains and
 public documentation hosts never receive dashboard credentials.
 
-The remote MCP is an OAuth 2.1 protected resource. Better Auth's OAuth Provider
-plugin supplies authorization-code + PKCE, consent, dynamic public-client
-registration, refresh tokens, revocation, and discovery metadata. MCP access
-tokens are short-lived and scoped (`docs:read`, `docs:contribute`,
-`docs:publish`, and `projects:read`). CI may continue to use a revocable project
-token, but a human connecting Codex should not paste a long-lived API key into
-a chat.
+The remote MCP publishes OAuth 2.1 protected-resource metadata, but
+authentication is optional for `initialize`, tool discovery, and public read
+tools. An unauthenticated call to a private or mutating tool receives an HTTP
+401 with `resource_metadata`, allowing a compatible client to start OAuth only
+when needed. Better Auth's OAuth Provider plugin supplies authorization-code +
+PKCE, consent, dynamic public-client registration, refresh tokens, revocation,
+and discovery metadata. MCP access tokens are short-lived and scoped
+(`docs:read`, `docs:contribute`, `docs:publish`, and `projects:read`). CI may
+continue to use a revocable project token, but a human connecting Codex should
+not paste a long-lived API key into a chat.
 
 ## Agent surface
 
@@ -86,9 +89,13 @@ The MCP surface stays deliberately narrow:
   highlighted passage.
 - `get_doc_page(project, slug, offset, length)` returns a bounded Markdown slice
   plus total length and source-file provenance.
+- `read_docs_structure(project)` lists the active pages and provenance without
+  dumping their Markdown.
 - `publish_docs(project, bundle)` validates and activates an immutable bundle.
 - `list_projects()` returns the projects available to the OAuth subject.
 - `discover_public_projects(query?)` lists public contribution targets.
+- `whoami()` reports the connected identity, OAuth scopes, and the assurance
+  level used by the community-review threshold.
 - `rate_docs(project, score, notes, model)` upserts one authenticated GPT-5.6
   rating per user and project.
 - `propose_doc_improvement(...)` validates and stores an immutable replacement
@@ -104,6 +111,15 @@ instead of duplicating business logic.
 Model provenance is agent-reported and recorded; Smolify cannot cryptographically
 attest which remote model ran. The contribution API currently accepts model
 identifiers in the GPT-5.6 family. Ratings are attributable to the OAuth user.
+
+Trust is intentionally split into separate dimensions. Ten independent
+GitHub-linked or verified-email identities produce a **Community reviewed**
+documentation status; ordinary accounts remain attributable but do not advance
+that threshold. **Official source** is different: it means the GitHub repository
+owner's immutable numeric ID appears in Smolify's curated publisher registry.
+The launch registry includes Cloudflare, OpenAI, Vercel, and Model Context
+Protocol. Neither status claims that the repository or its generated docs are
+secure.
 
 An improvement is a complete bundle stored under
 `projects/{projectId}/proposals/{proposalId}/bundle.json`. Owners fetch and
@@ -130,10 +146,16 @@ The search design follows the useful parts of `justrach/sglaw`:
 6. A deployment is fully indexed before `active_deployment_id` changes. Search
    sees the old complete corpus or the new complete corpus, never a partial one.
 
-D1 is the derived, query-optimized index. R2 remains the immutable source bundle
-that can be re-indexed when ranking changes. Search eval fixtures should become
-a release gate for API identifiers, endpoint paths, error names, and common
-natural-language tasks.
+D1 is the active query layer: project metadata, ownership, OAuth state,
+publisher provenance, searchable pages, FTS5/BM25 indexes, ratings, proposals,
+and the pointer to the live deployment. R2 is the immutable artifact layer: it
+stores complete versioned deployment and proposal bundles so an owner can
+review, roll back, re-index, or publish the exact bytes that were generated.
+Repository source archives are not retained. Current D1 project and
+introduction metadata overlays the immutable R2 payload at render time so the
+catalog, SEO, and hosted docs stay consistent without rewriting history.
+Search eval fixtures should become a release gate for API identifiers, endpoint
+paths, error names, and common natural-language tasks.
 
 ## Custom domains
 

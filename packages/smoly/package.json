@@ -1,0 +1,40 @@
+{
+  "name": "smoly",
+  "version": "0.1.0",
+  "description": "Install the Smolify MCP and agent skill across coding agents.",
+  "type": "module",
+  "bin": {
+    "smoly": "dist/cli.js"
+  },
+  "exports": {
+    ".": "./dist/installer.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "bun run scripts/build.mjs",
+    "test": "bun run build && node --test test/*.test.mjs",
+    "prepack": "bun run build",
+    "prepublishOnly": "bun run test"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/justrach/smolify.git",
+    "directory": "packages/smoly"
+  },
+  "keywords": [
+    "mcp",
+    "agent-skills",
+    "codex",
+    "documentation",
+    "smolify"
+  ],
+  "license": "MIT",
+  "engines": {
+    "node": ">=20"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

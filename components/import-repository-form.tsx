@@ -5,11 +5,11 @@ import { useState } from "react";
 type Visibility = "public" | "private";
 type ImportMode = "github" | "archive";
 
-export function ImportRepositoryForm() {
-  const [open, setOpen] = useState(false);
+export function ImportRepositoryForm({ initialOpen = false, initialUrl = "" }: { initialOpen?: boolean; initialUrl?: string }) {
+  const [open, setOpen] = useState(initialOpen);
   const [mode, setMode] = useState<ImportMode>("github");
   const [visibility, setVisibility] = useState<Visibility>("public");
-  const [url, setUrl] = useState("");
+  const [url, setUrl] = useState(initialUrl);
   const [archive, setArchive] = useState<File | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
@@ -46,9 +46,7 @@ export function ImportRepositoryForm() {
           return;
         }
         window.location.assign(
-          payload.project.visibility === "public"
-            ? `/explore/${payload.project.slug}`
-            : `/${payload.project.slug}/introduction`,
+          `/dashboard?project=${encodeURIComponent(payload.project.slug)}&imported=1#setup`,
         );
       }}
     >
@@ -61,8 +59,9 @@ export function ImportRepositoryForm() {
         <button aria-selected={mode === "archive"} data-active={mode === "archive"} onClick={() => { setMode("archive"); setVisibility("private"); }} role="tab" type="button">Upload ZIP</button>
       </div>
       {mode === "github" ? (
-        <label className="import-field">Public GitHub repository
+        <label className="import-field">GitHub repository URL
           <input required type="url" placeholder="https://github.com/owner/repository" value={url} onChange={(event) => setUrl(event.target.value)} />
+          <small>Public repositories work immediately. Connect GitHub to use your account quota or import a private repository.</small>
         </label>
       ) : (
         <label className="import-field">Repository ZIP
@@ -83,7 +82,7 @@ export function ImportRepositoryForm() {
       </fieldset>
       {error && <p className="form-error">{error}</p>}
       <button className="button" disabled={pending || (mode === "archive" && !archive)}>
-        {pending ? "Reading repository…" : "Make my docs page"}
+        {pending ? "Reading repository…" : "Create starter docs"}
       </button>
     </form>
   );

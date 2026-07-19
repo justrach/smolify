@@ -9,6 +9,7 @@ type SetupAssistantProps = {
   projectName: string;
   projectSlug: string;
   published: boolean;
+  scaffoldOnly: boolean;
 };
 
 type SourceMode = "openapi" | "routes" | "mixed";
@@ -40,7 +41,7 @@ function CodeBlock({ children, value = children }: { children: string; value?: s
   );
 }
 
-export function SetupAssistant({ endpoint, mcpConnected, projectName, projectSlug, published }: SetupAssistantProps) {
+export function SetupAssistant({ endpoint, mcpConnected, projectName, projectSlug, published, scaffoldOnly }: SetupAssistantProps) {
   const storageKey = `smolify:skill-installed:${projectSlug}`;
   const sourceKey = `smolify:source-mode:${projectSlug}`;
   const [skillInstalled, setSkillInstalled] = useState(false);
@@ -65,18 +66,19 @@ export function SetupAssistant({ endpoint, mcpConnected, projectName, projectSlu
       : "Reconcile the OpenAPI contract with route handlers, schemas, tests, and examples; call out disagreements.";
   const generationPrompt = `Use $smolify-api-docs to document this API for the Smolify project \"${projectSlug}\". ${sourceHint} Generate the bundle, show me the complete docs diff, and wait for my explicit approval before calling publish_docs.`;
 
-  const completed = [true, mcpConnected, skillInstalled, published];
+  const reviewedDocsLive = published && !scaffoldOnly;
+  const completed = [true, mcpConnected, skillInstalled, reviewedDocsLive];
   const completedCount = completed.filter(Boolean).length;
   const activeStep = completed.findIndex((item) => !item);
   const active = activeStep === -1 ? 3 : activeStep;
   const progress = Math.round((completedCount / completed.length) * 100);
 
   const statusLabel = useMemo(() => {
-    if (published) return "Your docs are live";
-    if (!mcpConnected) return "Connect Codex next";
+    if (!mcpConnected) return scaffoldOnly ? "Your starter docs are live — connect your agent next" : "Connect your agent next";
     if (!skillInstalled) return "Add the repository skill next";
-    return "Generate and review your first docs";
-  }, [mcpConnected, published, skillInstalled]);
+    if (!reviewedDocsLive) return scaffoldOnly ? "Turn the starter page into reviewed docs" : "Generate and review your first docs";
+    return "Your reviewed docs are live";
+  }, [mcpConnected, reviewedDocsLive, scaffoldOnly, skillInstalled]);
 
   return (
     <section className="setup-assistant" id="setup" aria-labelledby="setup-title">
@@ -103,13 +105,13 @@ export function SetupAssistant({ endpoint, mcpConnected, projectName, projectSlu
         <li className={`setup-step ${mcpConnected ? "complete" : active === 1 ? "active" : ""}`}>
           <div className="step-marker">{mcpConnected ? "✓" : "2"}</div>
           <div className="step-content">
-            <div className="step-heading"><div><span>MCP connection</span><h3>{mcpConnected ? "Codex is authorized" : "Connect Codex with OAuth"}</h3></div><strong>{mcpConnected ? "Done" : "Next"}</strong></div>
+            <div className="step-heading"><div><span>MCP connection</span><h3>{mcpConnected ? "Your agent is authorized" : "Connect the hosted Smolify MCP"}</h3></div><strong>{mcpConnected ? "Done" : "Next"}</strong></div>
             {!mcpConnected && (
               <div className="step-details">
-                <p>Run these once on your device. The second command opens a browser so you can approve the exact permissions Codex requests.</p>
+                <p>The first command enables public search immediately. Run the second only when you want Codex to access private docs, contribute, or publish.</p>
                 <CodeBlock>{`codex mcp add smolify --url ${endpoint}/mcp`}</CodeBlock>
                 <CodeBlock>codex mcp login smolify</CodeBlock>
-                <div className="trust-note"><span>◎</span><p><strong>No API keys.</strong> OAuth tokens stay in Codex, never in your repository or chat. Publishing still asks for explicit approval. Revoke locally with <code>codex mcp remove smolify</code>.</p></div>
+                <div className="trust-note"><span>◎</span><p><strong>No API keys.</strong> Public docs require no account. OAuth tokens stay in Codex, never in your repository or chat, and publishing still asks for explicit approval. Revoke locally with <code>codex mcp remove smolify</code>.</p></div>
                 <button className="secondary-button" type="button" onClick={() => window.location.reload()}>I authorized Codex · check again</button>
               </div>
             )}
@@ -120,7 +122,7 @@ export function SetupAssistant({ endpoint, mcpConnected, projectName, projectSlu
           <div className="step-marker">{skillInstalled ? "✓" : "3"}</div>
           <div className="step-content">
             <div className="step-heading"><div><span>Repository skill</span><h3>{skillInstalled ? "The Smolify skill is installed" : "Teach Codex the docs workflow"}</h3></div><strong>{skillInstalled ? "Done" : mcpConnected ? "Next" : "Waiting"}</strong></div>
-            {!skillInstalled && (
+            {!skillInstalled && active === 2 && (
               <div className="step-details">
                 <p>Open Codex in your API repository and paste this instruction. Codex installs the versioned skill locally, where your team can review it.</p>
                 <CodeBlock value={installPrompt}>Ask Codex to install the smolify-api-docs skill</CodeBlock>
@@ -140,14 +142,15 @@ export function SetupAssistant({ endpoint, mcpConnected, projectName, projectSlu
                 </button>
               </div>
             )}
+            {!skillInstalled && active !== 2 && <p className="step-summary">Connect the MCP first; the install instruction will unlock here next.</p>}
           </div>
         </li>
 
-        <li className={`setup-step ${published ? "complete" : active === 3 ? "active" : ""}`}>
-          <div className="step-marker">{published ? "✓" : "4"}</div>
+        <li className={`setup-step ${reviewedDocsLive ? "complete" : active === 3 ? "active" : ""}`}>
+          <div className="step-marker">{reviewedDocsLive ? "✓" : "4"}</div>
           <div className="step-content">
-            <div className="step-heading"><div><span>First publish</span><h3>{published ? "Your docs are live" : "Generate, review, then publish"}</h3></div><strong>{published ? "Live" : skillInstalled ? "Next" : "Waiting"}</strong></div>
-            {!published && (
+            <div className="step-heading"><div><span>Reviewed docs</span><h3>{reviewedDocsLive ? "Your reviewed docs are live" : scaffoldOnly ? "Replace the starter scaffold with reviewed docs" : "Generate, review, then publish"}</h3></div><strong>{reviewedDocsLive ? "Live" : skillInstalled ? "Next" : "Waiting"}</strong></div>
+            {!reviewedDocsLive && active === 3 && (
               <div className="step-details">
                 <p>What should Codex treat as the source of truth?</p>
                 <div className="choice-row" role="radiogroup" aria-label="API source type">
@@ -176,7 +179,8 @@ export function SetupAssistant({ endpoint, mcpConnected, projectName, projectSlu
                 <CodeBlock value={generationPrompt}>Copy the tailored generation prompt</CodeBlock>
               </div>
             )}
-            {published && <p className="step-summary">Updates stay immutable and searchable; publishing a new reviewed bundle atomically replaces the live version.</p>}
+            {!reviewedDocsLive && active !== 3 && <p className="step-summary">Complete the steps above to unlock a tailored Codex prompt for this repository.</p>}
+            {reviewedDocsLive && <p className="step-summary">Updates stay immutable and searchable; publishing a new reviewed bundle atomically replaces the live version.</p>}
           </div>
         </li>
       </ol>

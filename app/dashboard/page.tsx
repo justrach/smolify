@@ -15,17 +15,21 @@ import { ProposalReviewList } from "@/components/proposal-review-list";
 import { ProjectVisibilityControl } from "@/components/project-visibility-control";
 
 type DashboardProps = {
-  searchParams: Promise<{ project?: string }>;
+  searchParams: Promise<{ project?: string; import?: string }>;
 };
 
 export default async function DashboardPage({ searchParams }: DashboardProps) {
+  const query = await searchParams;
   const requestHeaders = await headers();
   const host = requestHeaders.get("host") ?? "localhost";
   const protocol = requestHeaders.get("x-forwarded-proto")
     ?? (host.startsWith("localhost") || host.startsWith("127.0.0.1") ? "http" : "https");
   const auth = await createAuth(new Request(`${protocol}://${host}/dashboard`, { headers: requestHeaders }));
   const session = await auth.api.getSession({ headers: requestHeaders });
-  if (!session) redirect("/login");
+  if (!session) {
+    const returnTo = query.import ? `/dashboard?import=${encodeURIComponent(query.import)}` : "/dashboard";
+    redirect(`/login?returnTo=${encodeURIComponent(returnTo)}`);
+  }
 
   const { env } = await getCloudflareContext({ async: true });
   const [projects, consent] = await Promise.all([
@@ -34,7 +38,7 @@ export default async function DashboardPage({ searchParams }: DashboardProps) {
       .bind(session.user.id)
       .first<{ id: string }>(),
   ]);
-  const requestedProject = (await searchParams).project;
+  const requestedProject = query.project;
   const selectedProject = projects.find((project) => project.slug === requestedProject)
     ?? projects.find((project) => !project.activeDeploymentId)
     ?? projects[0];
@@ -57,7 +61,14 @@ export default async function DashboardPage({ searchParams }: DashboardProps) {
           <h1>Small setup.<br />Docs that know your code.</h1>
           <p>Create a project, authorize Codex, and publish only after you review the generated diff.</p>
         </div>
-        <div className="dashboard-primary-actions"><ImportRepositoryForm /><CreateProjectForm /></div>
+        <div className="dashboard-primary-actions">
+          <ImportRepositoryForm initialOpen={Boolean(query.import)} initialUrl={query.import} />
+          <details className="blank-project-option">
+            <summary>Start without a repository</summary>
+            <p>Advanced: create an empty publishing target and bring your own bundle.</p>
+            <CreateProjectForm />
+          </details>
+        </div>
       </section>
 
       {projects.length > 0 && (
@@ -76,6 +87,7 @@ export default async function DashboardPage({ searchParams }: DashboardProps) {
             projectName={selectedProject.name}
             projectSlug={selectedProject.slug}
             published={Boolean(selectedProject.activeDeploymentId)}
+            scaffoldOnly={Boolean(selectedProject.activeDeploymentId && selectedProject.generatorModel?.startsWith("deterministic-"))}
           />
           <ProposalReviewList project={selectedProject.slug} proposals={proposals} />
         </>
@@ -88,15 +100,18 @@ export default async function DashboardPage({ searchParams }: DashboardProps) {
         </div>
         {projects.length ? projects.map((project) => {
           const isPublished = Boolean(project.activeDeploymentId);
+          const isStarter = Boolean(isPublished && project.generatorModel?.startsWith("deterministic-"));
           return (
             <article className="project-card" key={project.slug}>
               <div className="project-icon">{project.name.slice(0, 1).toUpperCase()}</div>
               <div>
-                <div className="project-title-row"><h3>{project.name}</h3><span className={`project-state ${isPublished ? "live" : "setup"}`}>{isPublished ? "Live" : "Setup"}</span><span className={`project-state ${project.visibility}`}>{project.visibility}</span>{project.pendingProposals > 0 && <span className="project-state proposals">{project.pendingProposals} proposals</span>}</div>
+                <div className="project-title-row"><h3>{project.name}</h3><span className={`project-state ${isStarter ? "starter" : isPublished ? "live" : "setup"}`}>{isStarter ? "Starter docs" : isPublished ? "Live" : "Setup"}</span><span className={`project-state ${project.visibility}`}>{project.visibility}</span>{project.pendingProposals > 0 && <span className="project-state proposals">{project.pendingProposals} proposals</span>}</div>
                 <p>{new URL(appUrl).host}/{project.slug}</p>
               </div>
               <div className="project-actions">
-                {isPublished
+                {isStarter
+                  ? <Link href={`/dashboard?project=${project.slug}#setup`}>Finish with Codex →</Link>
+                  : isPublished
                   ? project.visibility === "public"
                     ? <a href={`${appUrl}/${project.slug}/introduction`}>View docs ↗</a>
                     : <Link href={`/${project.slug}/introduction`}>View private docs →</Link>

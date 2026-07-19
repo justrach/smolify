@@ -163,8 +163,12 @@ assert.deepEqual(tools.result.tools.map((tool) => tool.name).sort(), [
   "propose_doc_improvement",
   "publish_docs",
   "rate_docs",
+  "read_docs_structure",
   "search_docs",
+  "whoami",
 ]);
+const identity = await rpc("tools/call", { name: "whoami", arguments: {} });
+assert.equal(identity.result.structuredContent.identity.assurance, "account");
 const discovered = await rpc("tools/call", { name: "discover_public_projects", arguments: { query: suffix } });
 const discoveredSlugs = discovered.result.structuredContent.projects.map((project) => project.slug);
 assert.ok(discoveredSlugs.includes(publicProject), "public project was not discoverable");
@@ -181,6 +185,7 @@ const rating = await rpc("tools/call", {
 });
 assert.ok(rating.result.structuredContent, `rating failed: ${JSON.stringify(rating)}`);
 assert.equal(rating.result.structuredContent.aggregate.count, 1);
+assert.equal(rating.result.structuredContent.aggregate.verifiedCount, 0);
 
 const improvedBundle = JSON.parse(await readFile(new URL("../examples/pawprint/smolify.bundle.json", import.meta.url)));
 improvedBundle.project.name = `Improved ${publicProject}`;

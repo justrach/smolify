@@ -1,0 +1,273 @@
+import { access, cp, mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
+import { dirname, join } from "node:path";
+import { randomUUID } from "node:crypto";
+
+export const DEFAULT_ENDPOINT = "https://app.smol.ly";
+export const MCP_SERVER_NAME = "smolify";
+export const SKILL_NAME = "smolify-api-docs";
+
+export type AgentId =
+  | "codex"
+  | "claude"
+  | "gemini"
+  | "devin"
+  | "graff"
+  | "forge"
+  | "cursor"
+  | "windsurf"
+  | "opencode"
+  | "droid";
+
+type AgentTarget = {
+  id: AgentId;
+  label: string;
+  relativePath: string;
+  style: "codex" | "json" | "claude";
+};
+
+export const AGENT_TARGETS: readonly AgentTarget[] = [
+  { id: "codex", label: "Codex", relativePath: ".codex/config.toml", style: "codex" },
+  { id: "claude", label: "Claude Code", relativePath: ".claude.json", style: "claude" },
+  { id: "gemini", label: "Gemini", relativePath: ".gemini/settings.json", style: "json" },
+  { id: "devin", label: "Devin", relativePath: ".config/devin/config.json", style: "json" },
+  { id: "graff", label: "Graff", relativePath: "codegraff/.mcp.json", style: "json" },
+  { id: "forge", label: "Forge", relativePath: "forge/mcp.json", style: "json" },
+  { id: "cursor", label: "Cursor", relativePath: ".cursor/mcp.json", style: "json" },
+  { id: "windsurf", label: "Windsurf", relativePath: ".codeium/windsurf/mcp_config.json", style: "json" },
+  { id: "opencode", label: "OpenCode", relativePath: ".config/opencode/mcp.json", style: "json" },
+  { id: "droid", label: "Droid", relativePath: ".factory/mcp.json", style: "json" },
+];
+
+export type InstallerAction = {
+  kind: "mcp" | "skill";
+  label: string;
+  path: string;
+  changed: boolean;
+  removed?: boolean;
+};
+
+export type InstallerOptions = {
+  home: string;
+  endpoint?: string;
+  agents?: AgentId[];
+  dryRun?: boolean;
+  installMcp?: boolean;
+  installSkill?: boolean;
+  skillSource?: string;
+};
+
+async function exists(path: string) {
+  try {
+    await access(path);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function normalizeEndpoint(endpoint: string) {
+  const parsed = new URL(endpoint);
+  if (parsed.protocol !== "https:" && parsed.hostname !== "localhost" && parsed.hostname !== "127.0.0.1") {
+    throw new Error("Smolify endpoint must use HTTPS");
+  }
+  parsed.pathname = parsed.pathname.replace(/\/+$/, "");
+  parsed.search = "";
+  parsed.hash = "";
+  return parsed.toString().replace(/\/$/, "");
+}
+
+function jsonEntry(endpoint: string, claude = false) {
+  return claude
+    ? { type: "http", url: `${endpoint}/mcp` }
+    : { url: `${endpoint}/mcp`, transport: "http" };
+}
+
+export function patchJsonMcpConfig(
+  source: string,
+  endpoint: string,
+  operation: "install" | "uninstall",
+  claude = false,
+) {
+  let parsed: Record<string, unknown>;
+  try {
+    parsed = source.trim() ? JSON.parse(source) as Record<string, unknown> : {};
+  } catch {
+    throw new Error("Refusing to modify an invalid JSON agent configuration");
+  }
+  if (!parsed || Array.isArray(parsed) || typeof parsed !== "object") {
+    throw new Error("Agent configuration must be a JSON object");
+  }
+  const current = parsed.mcpServers;
+  const servers = current && !Array.isArray(current) && typeof current === "object"
+    ? { ...(current as Record<string, unknown>) }
+    : {};
+  if (operation === "install") servers[MCP_SERVER_NAME] = jsonEntry(endpoint, claude);
+  else delete servers[MCP_SERVER_NAME];
+  parsed.mcpServers = servers;
+  return `${JSON.stringify(parsed, null, 2)}\n`;
+}
+
+function tomlSection(line: string) {
+  return line.match(/^\s*\[([^\]]+)]\s*(?:#.*)?$/)?.[1]?.trim() ?? null;
+}
+
+function isSmolifyTomlSection(section: string) {
+  return section === "mcp_servers.smolify"
+    || section === 'mcp_servers."smolify"'
+    || section.startsWith("mcp_servers.smolify.")
+    || section.startsWith('mcp_servers."smolify".');
+}
+
+export function patchCodexMcpConfig(
+  source: string,
+  endpoint: string,
+  operation: "install" | "uninstall",
+) {
+  const kept: string[] = [];
+  let skipping = false;
+  for (const line of source.split(/\r?\n/)) {
+    const section = tomlSection(line);
+    if (section) skipping = isSmolifyTomlSection(section);
+    if (!skipping) kept.push(line);
+  }
+  const base = kept.join("\n").trimEnd();
+  if (operation === "uninstall") return base ? `${base}\n` : "";
+  const block = `[mcp_servers.${MCP_SERVER_NAME}]\nurl = ${JSON.stringify(`${endpoint}/mcp`)}\n`;
+  return base ? `${base}\n\n${block}` : block;
+}
+
+async function atomicWrite(path: string, value: string) {
+  await mkdir(dirname(path), { recursive: true });
+  const temporary = `${path}.smoly-${randomUUID()}.tmp`;
+  await writeFile(temporary, value, { mode: 0o600 });
+  await rename(temporary, path);
+}
+
+async function readConfig(path: string, fallback: string) {
+  try {
+    return await readFile(path, "utf8");
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return fallback;
+    throw error;
+  }
+}
+
+async function selectedTargets(home: string, agents?: AgentId[]) {
+  if (agents?.length) {
+    const selected = new Set(agents);
+    return AGENT_TARGETS.filter((target) => selected.has(target.id));
+  }
+  const detected: AgentTarget[] = [];
+  for (const target of AGENT_TARGETS) {
+    const path = join(home, target.relativePath);
+    if (await exists(path) || await exists(dirname(path))) detected.push(target);
+  }
+  return detected.length ? detected : AGENT_TARGETS.filter((target) => target.id === "codex");
+}
+
+async function updateConfig(
+  path: string,
+  label: string,
+  style: AgentTarget["style"],
+  endpoint: string,
+  operation: "install" | "uninstall",
+  dryRun: boolean,
+) {
+  const before = await readConfig(path, style === "codex" ? "" : "{}\n");
+  const after = style === "codex"
+    ? patchCodexMcpConfig(before, endpoint, operation)
+    : patchJsonMcpConfig(before, endpoint, operation, style === "claude");
+  const changed = before !== after;
+  if (changed && !dryRun) await atomicWrite(path, after);
+  return { kind: "mcp", label, path, changed, removed: operation === "uninstall" } satisfies InstallerAction;
+}
+
+async function updateSkill(
+  home: string,
+  skillSource: string | undefined,
+  operation: "install" | "uninstall",
+  dryRun: boolean,
+) {
+  const path = join(home, ".agents", "skills", SKILL_NAME);
+  const present = await exists(path);
+  if (operation === "uninstall") {
+    if (present && !dryRun) await rm(path, { recursive: true });
+    return { kind: "skill", label: "Agent Skill", path, changed: present, removed: true } satisfies InstallerAction;
+  }
+  if (!skillSource || !(await exists(join(skillSource, "SKILL.md")))) {
+    throw new Error("The packaged Smolify skill is missing");
+  }
+  if (!dryRun) {
+    await mkdir(path, { recursive: true });
+    await cp(skillSource, path, { recursive: true, force: true });
+  }
+  return { kind: "skill", label: "Agent Skill", path, changed: true } satisfies InstallerAction;
+}
+
+export async function runInstaller(
+  operation: "install" | "uninstall" | "status",
+  options: InstallerOptions,
+) {
+  const endpoint = normalizeEndpoint(options.endpoint ?? DEFAULT_ENDPOINT);
+  const dryRun = options.dryRun ?? false;
+  const installMcp = options.installMcp ?? true;
+  const installSkill = options.installSkill ?? true;
+  const targets = await selectedTargets(options.home, options.agents);
+  const actions: InstallerAction[] = [];
+
+  if (operation === "status") {
+    const sourcePath = join(options.home, ".mcpconfig.json");
+    const candidates = [
+      { label: "mcpsync source", path: sourcePath, style: "json" as const },
+      ...targets.map((target) => ({ label: target.label, path: join(options.home, target.relativePath), style: target.style })),
+    ];
+    for (const candidate of candidates) {
+      const content = await readConfig(candidate.path, "");
+      const configured = candidate.style === "codex"
+        ? /\[mcp_servers\.(?:"smolify"|smolify)]/.test(content)
+        : (() => {
+            try {
+              const parsed = JSON.parse(content || "{}") as { mcpServers?: Record<string, unknown> };
+              return Boolean(parsed.mcpServers?.[MCP_SERVER_NAME]);
+            } catch {
+              return false;
+            }
+          })();
+      actions.push({ kind: "mcp", label: candidate.label, path: candidate.path, changed: configured });
+    }
+    const skillPath = join(options.home, ".agents", "skills", SKILL_NAME);
+    actions.push({ kind: "skill", label: "Agent Skill", path: skillPath, changed: await exists(join(skillPath, "SKILL.md")) });
+    return actions;
+  }
+
+  if (installMcp) {
+    actions.push(await updateConfig(
+      join(options.home, ".mcpconfig.json"),
+      "mcpsync source",
+      "json",
+      endpoint,
+      operation,
+      dryRun,
+    ));
+    for (const target of targets) {
+      actions.push(await updateConfig(
+        join(options.home, target.relativePath),
+        target.label,
+        target.style,
+        endpoint,
+        operation,
+        dryRun,
+      ));
+    }
+  }
+  if (installSkill) actions.push(await updateSkill(options.home, options.skillSource, operation, dryRun));
+  return actions;
+}
+
+export function parseAgentIds(value: string) {
+  const requested = value.split(",").map((item) => item.trim()).filter(Boolean);
+  const known = new Set(AGENT_TARGETS.map((target) => target.id));
+  const unknown = requested.filter((item) => !known.has(item as AgentId));
+  if (unknown.length) throw new Error(`Unknown agent: ${unknown.join(", ")}`);
+  return [...new Set(requested)] as AgentId[];
+}

@@ -10,6 +10,9 @@ type CreateProjectInput = {
   sourceRevision?: string | null;
   sourceFileCount?: number;
   importedAt?: string | null;
+  sourceOwnerGithubId?: number | null;
+  sourceOwnerLogin?: string | null;
+  sourceOwnerType?: "Organization" | "User" | null;
 };
 
 export async function uniqueProjectSlug(env: CloudflareEnv, desired: string) {
@@ -69,8 +72,9 @@ export async function createProjectForUser(
     env.DB.prepare(
       `INSERT INTO projects (
          id, organization_id, slug, name, visibility, source_type, source_url,
-         source_revision, source_file_count, imported_at, created_at, updated_at
-       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         source_revision, source_file_count, imported_at, source_owner_github_id,
+         source_owner_login, source_owner_type, created_at, updated_at
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     ).bind(
       projectId,
       organizationId,
@@ -82,6 +86,9 @@ export async function createProjectForUser(
       input.sourceRevision ?? null,
       input.sourceFileCount ?? 0,
       input.importedAt ?? null,
+      input.sourceOwnerGithubId ?? null,
+      input.sourceOwnerLogin ?? null,
+      input.sourceOwnerType ?? null,
       now,
       now,
     ),

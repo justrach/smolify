@@ -3,8 +3,12 @@ import "./styles.css";
 
 export const metadata: Metadata = {
   title: { default: "Smolify", template: "%s · Smolify" },
-  description: "Tiny setup. Serious, Codex-native API documentation.",
+  description: "Source-grounded repository documentation that humans and coding agents can search, review, and publish through one hosted MCP.",
   metadataBase: new URL("https://app.smol.ly"),
+  applicationName: "Smolify",
+  creator: "Smolify",
+  keywords: ["repository documentation", "API documentation", "MCP", "Codex", "developer tools", "BM25 search"],
+  alternates: { canonical: "/" },
   icons: { icon: "/favicon.svg" },
   openGraph: {
     title: "Smolify — Tiny setup. Serious docs.",
@@ -12,6 +16,13 @@ export const metadata: Metadata = {
     url: "https://app.smol.ly",
     siteName: "Smolify",
     type: "website",
+    images: [{ url: "/opengraph-image", width: 1200, height: 630, alt: "Smolify — Tiny setup. Serious docs." }],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Smolify — Tiny setup. Serious docs.",
+    description: "Source-grounded repository documentation for humans and coding agents.",
+    images: ["/opengraph-image"],
   },
 };
 

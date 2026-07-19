@@ -60,13 +60,27 @@ export async function getPublicProject(env: CloudflareEnv, projectSlug: string) 
   return env.DB.prepare(
     `SELECT projects.id, projects.slug, projects.name, projects.source_url AS sourceUrl,
        projects.source_type AS sourceType, projects.source_file_count AS sourceFileCount,
+       projects.source_owner_login AS sourceOwnerLogin,
+       projects.source_owner_type AS sourceOwnerType,
+       official_publishers.display_name AS officialPublisherName,
+       official_publishers.website_url AS officialPublisherWebsite,
+       official_publishers.github_url AS officialPublisherGithubUrl,
        projects.active_deployment_id AS activeDeploymentId,
        projects.updated_at AS updatedAt,
+       COALESCE((SELECT description FROM doc_pages
+         WHERE project_id = projects.id
+           AND deployment_id = projects.active_deployment_id
+           AND slug = 'introduction' LIMIT 1), '') AS description,
        COALESCE(AVG(doc_ratings.score), 0) AS ratingAverage,
        COUNT(doc_ratings.id) AS ratingCount,
+       (SELECT COUNT(*) FROM doc_ratings verified_ratings
+        WHERE verified_ratings.project_id = projects.id
+          AND verified_ratings.identity_assurance IN ('verified_email', 'github')) AS verifiedRatingCount,
        (SELECT COUNT(*) FROM doc_improvement_proposals proposals
         WHERE proposals.project_id = projects.id AND proposals.status = 'accepted') AS acceptedImprovements
      FROM projects
+     LEFT JOIN github_official_publishers official_publishers
+       ON official_publishers.github_owner_id = projects.source_owner_github_id
      LEFT JOIN doc_ratings ON doc_ratings.project_id = projects.id
      WHERE projects.slug = ?
        AND projects.visibility = 'public'
@@ -83,10 +97,17 @@ export async function getPublicProject(env: CloudflareEnv, projectSlug: string) 
       sourceUrl: string | null;
       sourceType: "manual" | "github" | "archive";
       sourceFileCount: number;
+      sourceOwnerLogin: string | null;
+      sourceOwnerType: "Organization" | "User" | null;
+      officialPublisherName: string | null;
+      officialPublisherWebsite: string | null;
+      officialPublisherGithubUrl: string | null;
       activeDeploymentId: string;
       updatedAt: string;
+      description: string;
       ratingAverage: number;
       ratingCount: number;
+      verifiedRatingCount: number;
       acceptedImprovements: number;
     }>();
 }
@@ -95,12 +116,26 @@ export async function listPublicProjects(env: CloudflareEnv, limit = 48) {
   const result = await env.DB.prepare(
     `SELECT projects.slug, projects.name, projects.source_url AS sourceUrl,
        projects.source_type AS sourceType, projects.source_file_count AS sourceFileCount,
+       projects.source_owner_login AS sourceOwnerLogin,
+       projects.source_owner_type AS sourceOwnerType,
+       official_publishers.display_name AS officialPublisherName,
+       official_publishers.website_url AS officialPublisherWebsite,
+       official_publishers.github_url AS officialPublisherGithubUrl,
        projects.updated_at AS updatedAt,
+       COALESCE((SELECT description FROM doc_pages
+         WHERE project_id = projects.id
+           AND deployment_id = projects.active_deployment_id
+           AND slug = 'introduction' LIMIT 1), '') AS description,
        COALESCE(AVG(doc_ratings.score), 0) AS ratingAverage,
        COUNT(doc_ratings.id) AS ratingCount,
+       (SELECT COUNT(*) FROM doc_ratings verified_ratings
+        WHERE verified_ratings.project_id = projects.id
+          AND verified_ratings.identity_assurance IN ('verified_email', 'github')) AS verifiedRatingCount,
        (SELECT COUNT(*) FROM doc_improvement_proposals proposals
         WHERE proposals.project_id = projects.id AND proposals.status = 'accepted') AS acceptedImprovements
      FROM projects
+     LEFT JOIN github_official_publishers official_publishers
+       ON official_publishers.github_owner_id = projects.source_owner_github_id
      LEFT JOIN doc_ratings ON doc_ratings.project_id = projects.id
      WHERE projects.visibility = 'public'
        AND projects.deleted_at IS NULL
@@ -113,12 +148,19 @@ export async function listPublicProjects(env: CloudflareEnv, limit = 48) {
     .all<{
       slug: string;
       name: string;
+      description: string;
       sourceUrl: string | null;
       sourceType: "manual" | "github" | "archive";
       sourceFileCount: number;
+      sourceOwnerLogin: string | null;
+      sourceOwnerType: "Organization" | "User" | null;
+      officialPublisherName: string | null;
+      officialPublisherWebsite: string | null;
+      officialPublisherGithubUrl: string | null;
       updatedAt: string;
       ratingAverage: number;
       ratingCount: number;
+      verifiedRatingCount: number;
       acceptedImprovements: number;
     }>();
   return result.results;
@@ -130,6 +172,7 @@ export async function listAccessibleProjects(env: CloudflareEnv, userId: string)
        projects.source_type AS sourceType, projects.source_url AS sourceUrl,
        projects.source_file_count AS sourceFileCount,
        projects.active_deployment_id AS activeDeploymentId,
+       active_deployment.generator_model AS generatorModel,
        domains.id AS domainId, domains.hostname, domains.status AS domainStatus,
        COALESCE((SELECT AVG(score) FROM doc_ratings WHERE project_id = projects.id), 0) AS ratingAverage,
        (SELECT COUNT(*) FROM doc_ratings WHERE project_id = projects.id) AS ratingCount,
@@ -137,6 +180,8 @@ export async function listAccessibleProjects(env: CloudflareEnv, userId: string)
         WHERE project_id = projects.id AND status = 'pending') AS pendingProposals
      FROM projects
      JOIN member ON member.organizationId = projects.organization_id
+     LEFT JOIN deployments active_deployment
+       ON active_deployment.id = projects.active_deployment_id
      LEFT JOIN domains ON domains.id = (
        SELECT candidate.id FROM domains AS candidate
        WHERE candidate.project_id = projects.id AND candidate.kind = 'custom'
@@ -155,6 +200,7 @@ export async function listAccessibleProjects(env: CloudflareEnv, userId: string)
       sourceUrl: string | null;
       sourceFileCount: number;
       activeDeploymentId: string | null;
+      generatorModel: string | null;
       domainId: string | null;
       hostname: string | null;
       domainStatus: "pending" | "verifying" | "active" | "failed" | null;

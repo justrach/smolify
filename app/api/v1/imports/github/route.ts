@@ -4,6 +4,7 @@ import { createAuth } from "@/lib/auth";
 import { buildRepositoryBundle, fetchGithubSnapshot, parseGithubRepositoryUrl } from "@/lib/imports/repository";
 import { publishDocsDeployment } from "@/lib/docs/deployments";
 import { createProjectForUser, uniqueProjectSlug } from "@/lib/projects/service";
+import { githubAccessTokenForUser } from "@/lib/github/access";
 
 const importSchema = z.object({
   url: z.string().url().max(500),
@@ -19,10 +20,11 @@ export async function POST(request: Request) {
   if (!parsed.success) return Response.json({ error: "Enter a valid GitHub repository URL" }, { status: 422 });
 
   try {
-    const github = parseGithubRepositoryUrl(parsed.data.url);
-    const snapshot = await fetchGithubSnapshot(github.url);
-    const bundle = buildRepositoryBundle(snapshot);
     const { env } = await getCloudflareContext({ async: true });
+    const github = parseGithubRepositoryUrl(parsed.data.url);
+    const accessToken = await githubAccessTokenForUser(env, session.user.id);
+    const snapshot = await fetchGithubSnapshot(github.url, accessToken);
+    const bundle = buildRepositoryBundle(snapshot);
     const slug = await uniqueProjectSlug(env, snapshot.name);
     const project = await createProjectForUser(env, session.user, {
       name: snapshot.name,
@@ -33,6 +35,9 @@ export async function POST(request: Request) {
       sourceRevision: snapshot.revision,
       sourceFileCount: snapshot.totalFiles,
       importedAt: bundle.generatedAt,
+      sourceOwnerGithubId: snapshot.sourceOwner?.githubId,
+      sourceOwnerLogin: snapshot.sourceOwner?.login,
+      sourceOwnerType: snapshot.sourceOwner?.type,
     });
     try {
       const deployment = await publishDocsDeployment(env, project, bundle, {

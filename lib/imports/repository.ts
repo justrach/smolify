@@ -13,6 +13,11 @@ export type RepositorySnapshot = {
   revision: string | null;
   files: RepositoryFile[];
   totalFiles: number;
+  sourceOwner?: {
+    githubId: number;
+    login: string;
+    type: "Organization" | "User";
+  } | null;
 };
 
 const TEXT_FILE = /(?:^|\/)(?:readme(?:\.[a-z0-9]+)?|license(?:\.[a-z0-9]+)?|dockerfile|gemfile|makefile)$|\.(?:md|mdx|txt|json|ya?ml|toml|ini|conf|xml|graphql|gql|proto|ts|tsx|js|jsx|mjs|cjs|py|rb|rs|go|java|kt|kts|swift|php|cs|c|cc|cpp|h|hpp|sh|sql)$/i;
@@ -353,7 +358,7 @@ export function buildRepositoryBundle(snapshot: RepositorySnapshot): DocsBundle 
   const description = truncate(snapshot.description || packageDescription || "An imported software repository.", 220);
   const sourceLine = snapshot.sourceUrl
     ? `\n[View the source repository](${snapshot.sourceUrl})\n`
-    : "\nThis repository was uploaded privately. Smolify retained the generated documentation bundle, not the source archive.\n";
+    : "\nThis repository snapshot came from an uploaded ZIP. Smolify retained the generated documentation bundle, not the source archive.\n";
   const intro = [
     `# ${inline(snapshot.name)}`,
     "",
@@ -446,12 +451,13 @@ export function parseGithubRepositoryUrl(value: string) {
   return { owner, repository, url: `https://github.com/${owner}/${repository}` };
 }
 
-async function githubJson<T>(url: string): Promise<T> {
+async function githubJson<T>(url: string, accessToken?: string): Promise<T> {
   const response = await fetch(url, {
     headers: {
       accept: "application/vnd.github+json",
       "user-agent": "smolify-repository-importer",
       "x-github-api-version": "2022-11-28",
+      ...(accessToken ? { authorization: `Bearer ${accessToken}` } : {}),
     },
   });
   if (!response.ok) {
@@ -462,7 +468,7 @@ async function githubJson<T>(url: string): Promise<T> {
   return response.json() as Promise<T>;
 }
 
-export async function fetchGithubSnapshot(value: string): Promise<RepositorySnapshot> {
+export async function fetchGithubSnapshot(value: string, accessToken?: string): Promise<RepositorySnapshot> {
   const parsed = parseGithubRepositoryUrl(value);
   const repository = await githubJson<{
     name: string;
@@ -472,13 +478,18 @@ export async function fetchGithubSnapshot(value: string): Promise<RepositorySnap
     private: boolean;
     html_url: string;
     pushed_at: string;
-  }>(`https://api.github.com/repos/${parsed.owner}/${parsed.repository}`);
-  if (repository.private) throw new Error("Private GitHub repositories must be uploaded as a ZIP.");
+    owner: {
+      id: number;
+      login: string;
+      type: "Organization" | "User";
+    };
+  }>(`https://api.github.com/repos/${parsed.owner}/${parsed.repository}`, accessToken);
+  if (repository.private && !accessToken) throw new Error("Connect GitHub or upload a ZIP to import a private repository.");
 
   const tree = await githubJson<{
     truncated: boolean;
     tree: Array<{ path: string; type: "blob" | "tree"; size?: number }>;
-  }>(`https://api.github.com/repos/${parsed.owner}/${parsed.repository}/git/trees/${encodeURIComponent(repository.default_branch)}?recursive=1`);
+  }>(`https://api.github.com/repos/${parsed.owner}/${parsed.repository}/git/trees/${encodeURIComponent(repository.default_branch)}?recursive=1`, accessToken);
   const allBlobs = tree.tree
     .filter((entry): entry is GithubTreeBlob => entry.type === "blob" && safePath(entry.path) && TEXT_FILE.test(entry.path));
   const blobs = balancedTake(allBlobs, MAX_GITHUB_PATHS, (entry) => topLevel(entry.path));
@@ -491,7 +502,10 @@ export async function fetchGithubSnapshot(value: string): Promise<RepositorySnap
       const rawPath = entry.path.split("/").map(encodeURIComponent).join("/");
       const response = await fetch(
         `https://raw.githubusercontent.com/${parsed.owner}/${parsed.repository}/${encodeURIComponent(repository.default_branch)}/${rawPath}`,
-        { headers: { "user-agent": "smolify-repository-importer" } },
+        { headers: {
+          "user-agent": "smolify-repository-importer",
+          ...(accessToken ? { authorization: `Bearer ${accessToken}` } : {}),
+        } },
       );
       if (!response.ok) return null;
       return { path: entry.path, bytes: new Uint8Array(await response.arrayBuffer()) };
@@ -510,6 +524,11 @@ export async function fetchGithubSnapshot(value: string): Promise<RepositorySnap
     revision: `${repository.default_branch} · ${repository.pushed_at}`,
     files: blobs.map((entry) => ({ path: entry.path, content: contents.get(entry.path) })),
     totalFiles: tree.tree.filter((entry) => entry.type === "blob").length,
+    sourceOwner: {
+      githubId: repository.owner.id,
+      login: repository.owner.login,
+      type: repository.owner.type,
+    },
   };
 }
 
@@ -553,10 +572,11 @@ export function snapshotFromZip(data: Uint8Array, filename: string): RepositoryS
   const archiveName = filename.replace(/\.zip$/i, "").replace(/[-_]?(?:main|master)$/i, "");
   return {
     name: (packageName || archiveName || "Uploaded repository").slice(0, 80),
-    description: packageDescription || "A privately uploaded repository snapshot.",
+    description: packageDescription || "A repository snapshot imported from an uploaded ZIP.",
     sourceUrl: null,
     revision: "uploaded ZIP snapshot",
     files: normalized,
     totalFiles: totalEntries,
+    sourceOwner: null,
   };
 }

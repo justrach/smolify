@@ -69,3 +69,22 @@ export async function getActiveDocPage(
       markdown: string;
     }>();
 }
+
+export async function listActiveDocPages(env: CloudflareEnv, project: string) {
+  const result = await env.DB.prepare(
+    `SELECT p.slug, p.title, p.description, p.source_files AS sourceFiles
+     FROM doc_pages p
+     JOIN projects project ON project.id = p.project_id
+     WHERE project.slug = ?
+       AND project.active_deployment_id = p.deployment_id
+       AND project.deleted_at IS NULL
+     ORDER BY p.rowid
+     LIMIT 500`,
+  )
+    .bind(project)
+    .all<{ slug: string; title: string; description: string; sourceFiles: string }>();
+  return result.results.map((page) => ({
+    ...page,
+    sourceFiles: page.sourceFiles.split("\n").filter(Boolean),
+  }));
+}

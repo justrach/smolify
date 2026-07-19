@@ -1,5 +1,6 @@
 export type ProjectVisibility = "public" | "private";
 export type ProjectSourceType = "manual" | "github" | "archive";
+export type ProjectSourceRetention = "metadata-only" | "public-symbols";
 
 type CreateProjectInput = {
   name: string;
@@ -8,6 +9,8 @@ type CreateProjectInput = {
   sourceType?: ProjectSourceType;
   sourceUrl?: string | null;
   sourceRevision?: string | null;
+  sourceCommit?: string | null;
+  sourceRetention?: ProjectSourceRetention;
   sourceFileCount?: number;
   importedAt?: string | null;
   sourceOwnerGithubId?: number | null;
@@ -72,9 +75,9 @@ export async function createProjectForUser(
     env.DB.prepare(
       `INSERT INTO projects (
          id, organization_id, slug, name, visibility, source_type, source_url,
-         source_revision, source_file_count, imported_at, source_owner_github_id,
+         source_revision, source_commit, source_retention, source_file_count, imported_at, source_owner_github_id,
          source_owner_login, source_owner_type, created_at, updated_at
-       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     ).bind(
       projectId,
       organizationId,
@@ -84,6 +87,8 @@ export async function createProjectForUser(
       input.sourceType ?? "manual",
       input.sourceUrl ?? null,
       input.sourceRevision ?? null,
+      input.sourceCommit ?? null,
+      input.sourceRetention ?? "metadata-only",
       input.sourceFileCount ?? 0,
       input.importedAt ?? null,
       input.sourceOwnerGithubId ?? null,

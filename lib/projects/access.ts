@@ -7,6 +7,10 @@ export type AccessibleProject = {
   visibility: "public" | "private";
   activeDeploymentId: string | null;
   sourceUrl: string | null;
+  sourceType: "manual" | "github" | "archive";
+  sourceRevision: string | null;
+  sourceCommit: string | null;
+  sourceRetention: "metadata-only" | "public-symbols";
 };
 
 export async function getAccessibleProject(
@@ -19,7 +23,11 @@ export async function getAccessibleProject(
        projects.organization_id AS organizationId, member.role,
        projects.visibility,
        projects.active_deployment_id AS activeDeploymentId,
-       projects.source_url AS sourceUrl
+       projects.source_url AS sourceUrl,
+       projects.source_type AS sourceType,
+       projects.source_revision AS sourceRevision,
+       projects.source_commit AS sourceCommit,
+       projects.source_retention AS sourceRetention
      FROM projects
      JOIN member ON member.organizationId = projects.organization_id
      WHERE projects.slug = ?
@@ -42,6 +50,10 @@ export async function getReadableProject(
        projects.visibility,
        projects.active_deployment_id AS activeDeploymentId,
        projects.source_url AS sourceUrl,
+       projects.source_type AS sourceType,
+       projects.source_revision AS sourceRevision,
+       projects.source_commit AS sourceCommit,
+       projects.source_retention AS sourceRetention,
        CASE WHEN member.userId IS NULL THEN 0 ELSE 1 END AS isMember
      FROM projects
      LEFT JOIN member
@@ -60,6 +72,9 @@ export async function getPublicProject(env: CloudflareEnv, projectSlug: string) 
   return env.DB.prepare(
     `SELECT projects.id, projects.slug, projects.name, projects.source_url AS sourceUrl,
        projects.source_type AS sourceType, projects.source_file_count AS sourceFileCount,
+       CASE WHEN projects.source_retention = 'public-symbols' THEN projects.source_revision ELSE NULL END AS sourceRevision,
+       CASE WHEN projects.source_retention = 'public-symbols' THEN projects.source_commit ELSE NULL END AS sourceCommit,
+       projects.source_retention AS sourceRetention,
        projects.source_owner_login AS sourceOwnerLogin,
        projects.source_owner_type AS sourceOwnerType,
        official_publishers.display_name AS officialPublisherName,
@@ -97,6 +112,9 @@ export async function getPublicProject(env: CloudflareEnv, projectSlug: string) 
       sourceUrl: string | null;
       sourceType: "manual" | "github" | "archive";
       sourceFileCount: number;
+      sourceRevision: string | null;
+      sourceCommit: string | null;
+      sourceRetention: "metadata-only" | "public-symbols";
       sourceOwnerLogin: string | null;
       sourceOwnerType: "Organization" | "User" | null;
       officialPublisherName: string | null;
@@ -116,6 +134,9 @@ export async function listPublicProjects(env: CloudflareEnv, limit = 48) {
   const result = await env.DB.prepare(
     `SELECT projects.slug, projects.name, projects.source_url AS sourceUrl,
        projects.source_type AS sourceType, projects.source_file_count AS sourceFileCount,
+       CASE WHEN projects.source_retention = 'public-symbols' THEN projects.source_revision ELSE NULL END AS sourceRevision,
+       CASE WHEN projects.source_retention = 'public-symbols' THEN projects.source_commit ELSE NULL END AS sourceCommit,
+       projects.source_retention AS sourceRetention,
        projects.source_owner_login AS sourceOwnerLogin,
        projects.source_owner_type AS sourceOwnerType,
        official_publishers.display_name AS officialPublisherName,
@@ -152,6 +173,9 @@ export async function listPublicProjects(env: CloudflareEnv, limit = 48) {
       sourceUrl: string | null;
       sourceType: "manual" | "github" | "archive";
       sourceFileCount: number;
+      sourceRevision: string | null;
+      sourceCommit: string | null;
+      sourceRetention: "metadata-only" | "public-symbols";
       sourceOwnerLogin: string | null;
       sourceOwnerType: "Organization" | "User" | null;
       officialPublisherName: string | null;

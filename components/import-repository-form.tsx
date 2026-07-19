@@ -61,7 +61,7 @@ export function ImportRepositoryForm({ initialOpen = false, initialUrl = "" }: {
       {mode === "github" ? (
         <label className="import-field">GitHub repository URL
           <input required type="url" placeholder="https://github.com/owner/repository" value={url} onChange={(event) => setUrl(event.target.value)} />
-          <small>Public repositories work immediately. Connect GitHub to use your account quota or import a private repository.</small>
+          <small>Public repositories add commit-linked symbol and call metadata. Private imports retain docs and paths only.</small>
         </label>
       ) : (
         <label className="import-field">Repository ZIP

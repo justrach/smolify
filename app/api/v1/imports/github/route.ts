@@ -33,6 +33,8 @@ export async function POST(request: Request) {
       sourceType: "github",
       sourceUrl: snapshot.sourceUrl,
       sourceRevision: snapshot.revision,
+      sourceCommit: snapshot.sourceCommit,
+      sourceRetention: snapshot.sourceRetention,
       sourceFileCount: snapshot.totalFiles,
       importedAt: bundle.generatedAt,
       sourceOwnerGithubId: snapshot.sourceOwner?.githubId,

@@ -39,13 +39,24 @@ export class SmolifyClient {
     const params = new URLSearchParams({ q: query, limit: String(limit) });
     return this.json<{
       query: string;
-      matchMode: "all_terms" | "any_term";
+      matchMode: "exact_identifier" | "all_terms" | "any_term";
+      confidence: "high" | "medium" | "low";
+      fallbackUsed: boolean;
+      fallbackReason?: string | null;
+      identifierCoverage: {
+        requested: string[];
+        matched: string[];
+        unmatched: string[];
+      };
       results: Array<{
         slug: string;
         title: string;
         description: string;
         score: number;
         snippet: string;
+        sourceFiles: string[];
+        matchReason: "exact_identifier" | "all_terms" | "any_term";
+        matchedIdentifiers: string[];
       }>;
     }>(`/api/v1/projects/${encodeURIComponent(project)}/search?${params}`);
   }
@@ -58,7 +69,7 @@ export class SmolifyClient {
       slug: string;
       title: string;
       description: string;
-      sourceFiles: string;
+      sourceFiles: string[];
       totalLength: number;
       markdown: string;
       offset: number;

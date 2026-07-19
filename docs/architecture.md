@@ -15,7 +15,9 @@ Smolify has five cooperating parts:
    R2, indexes active pages in D1 FTS5, and renders a safe docs site.
 5. A bounded repository importer creates an immediate deterministic scaffold
    from a public GitHub URL or an uploaded ZIP. It does not call a model or
-   retain the source archive.
+   retain the source archive. Public GitHub imports may retain value-free
+   declaration and call-relationship metadata with commit-pinned links;
+   private GitHub and ZIP imports remain metadata-only.
 
 The hosted service does not execute generated code and does not require a
 customer OpenAI API key.
@@ -41,17 +43,22 @@ customer OpenAI API key.
 
 Public GitHub import accepts only a repository-root URL. It reads repository
 metadata, up to 30,000 balanced supported text paths, up to 132 balanced
-first-party guides, and up to 24 ecosystem READMEs. Fetched content is capped
-at 8 MB and read in batches of eight. ZIP upload enforces compressed, expanded,
-entry-count, per-file, and decoded-byte limits; path traversal and generated
-dependency/build directories are ignored.
+first-party guides, up to 24 ecosystem READMEs, and up to 96 balanced public
+source files for symbol extraction. Guide content is capped at 8 MB and public
+source analysis at 2 MB, both read in batches of eight. ZIP upload enforces
+compressed, expanded, entry-count, per-file, and decoded-byte limits; path
+traversal and generated dependency/build directories are ignored.
 
 The deterministic importer emits an introduction, balanced repository map,
 optional package-derived development page, source-grounded guide pages, and
-chunked file-index pages. Every page is schema-bounded and unsafe HTML schemes
-are escaped before storage. It never claims inferred runtime behavior.
-README/package/guide content and source paths may appear in the generated docs
-bundle; the source archive and arbitrary source contents are not retained.
+chunked file-index pages. For public GitHub repositories it also emits bounded
+source-symbol pages containing declaration names, import module names,
+call-reference names, source line numbers, and commit-pinned GitHub links. It
+does not copy implementations or literal values. Every page is schema-bounded
+and unsafe HTML schemes are escaped before storage. It never claims inferred
+runtime behavior. README/package/guide content and source metadata may appear
+in the generated docs bundle; source archives and arbitrary source contents are
+not retained. Private GitHub imports and ZIP uploads never emit symbol pages.
 
 ## Rendering boundary
 
@@ -87,8 +94,19 @@ The MCP surface stays deliberately narrow:
 
 - `search_docs(project, query, limit)` returns ranked summaries and a short
   highlighted passage.
+- `build_docs_context(project, task, maxTokens, maxPages)` combines exact
+  identifier hits with focused BM25 facets, penalizes structural/file-map
+  noise, and packs diverse bounded page and eligible source slices for the
+  calling agent to synthesize. It calls no embedding or answer model.
 - `get_doc_page(project, slug, offset, length)` returns a bounded Markdown slice
   plus total length and source-file provenance.
+- `read_public_source(project, path, startLine, lineCount)` reads at most 200
+  explicit lines from the imported GitHub commit. It is disabled for private,
+  uploaded, and metadata-only sources.
+- `resolve_public_symbols(project, symbols, pathHints?, maxResults)` checks
+  exact source-file hints first, then ranks paths from the pinned public GitHub
+  tree and scans at most 96 files/4 MB. It returns value-free occurrences and
+  commit-pinned links, and reports unresolved identifiers explicitly.
 - `read_docs_structure(project)` lists the active pages and provenance without
   dumping their Markdown.
 - `publish_docs(project, bundle)` validates and activates an immutable bundle.
@@ -130,7 +148,8 @@ touches the live deployment.
 
 ## Search and indexing
 
-The search design follows the useful parts of `justrach/sglaw`:
+The search design combines FTS5/BM25 with the useful no-embedding structural
+retrieval pattern from `justrach/codedb`:
 
 1. Every page is normalized into title, description, headings, symbols, body,
    and source-file fields during publish.
@@ -139,11 +158,24 @@ The search design follows the useful parts of `justrach/sglaw`:
 3. BM25 weights favor API symbols, then titles and headings, over prose.
    Identifier aliases split `getUserById`, `get_user_by_id`, paths, and source
    filenames so agents can search with either code or natural words.
-4. Search tries all terms first and only falls back to any term on zero hits.
-   The response explicitly identifies the match mode.
-5. Results are bounded. Agents search first, then fetch a page slice; a tool
-   call never dumps the entire corpus into context.
-6. A deployment is fully indexed before `active_deployment_id` changes. Search
+4. Search detects code-shaped query tokens and checks exact symbol aliases
+   first. If no exact symbol matches, it tries all BM25 terms and only falls
+   back to any term on zero hits. Every response reports match mode, confidence,
+   whether a fallback occurred, identifier coverage, per-result match reason,
+   and machine-readable source files.
+5. `build_docs_context` removes prompt boilerplate, searches up to four focused
+   task facets, merges exact and lexical candidates, penalizes introduction and
+   file-map noise, de-duplicates pages, and gives selected pages fair shares of
+   an explicit token-derived character budget.
+6. For public code-shaped queries, exact source page paths become resolver
+   hints. The resolver checks those paths before a bounded ranked scan of the
+   pinned GitHub tree, then packs the most useful implementation ranges into
+   the same context budget. Smolify returns evidence; the calling agent
+   performs synthesis.
+7. Results are bounded. Agents search first, then fetch a page slice or at most
+   200 commit-pinned public source lines; a tool call never dumps the entire
+   corpus or repository into context.
+8. A deployment is fully indexed before `active_deployment_id` changes. Search
    sees the old complete corpus or the new complete corpus, never a partial one.
 
 D1 is the active query layer: project metadata, ownership, OAuth state,
@@ -151,7 +183,14 @@ publisher provenance, searchable pages, FTS5/BM25 indexes, ratings, proposals,
 and the pointer to the live deployment. R2 is the immutable artifact layer: it
 stores complete versioned deployment and proposal bundles so an owner can
 review, roll back, re-index, or publish the exact bytes that were generated.
-Repository source archives are not retained. Current D1 project and
+Repository source archives and private source contents are not retained.
+Public source-symbol pages contain metadata and commit-pinned links, not code
+implementations or literal values. D1 retains the eligible public commit and
+retention mode. Explicit source-line and symbol-resolution reads fetch safe
+code paths directly from that immutable public GitHub commit, reject
+sensitive/config paths, cap each upstream file at 512 KB, cap resolver scans at
+96 files/4 MB, and return bounded ranges; they do not persist fetched bodies.
+Current D1 project and
 introduction metadata overlays the immutable R2 payload at render time so the
 catalog, SEO, and hosted docs stay consistent without rewriting history.
 Search eval fixtures should become a release gate for API identifiers, endpoint

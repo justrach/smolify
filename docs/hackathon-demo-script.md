@@ -101,25 +101,36 @@ reference page and run a search that uses an endpoint or error code.
 > text search. Teams start on an app.smol.ly address and can attach their own
 > domain without changing the application deployment.
 
-### 1:58–2:20 — The same docs are an agent tool
+### 1:58–2:24 — Prove synthesis without embeddings
 
-**Show:** Return to Codex and reveal an already-completed Smolify MCP search,
-followed by the retrieved page. If live tool latency is consistently low, this
-can be run live; otherwise use the prepared result.
+**Show:** Return to Codex and reveal the prepared public `next-js` challenge.
+First show `build_docs_context` reporting `embeddings: false` and
+`answerModel: false`, expand its facet-diverse docs pages, exact symbol match,
+and two commit-pinned source ranges, then reveal Codex's synthesized answer.
+Briefly show the same prompt's DeepWiki result beside it. Use the reproducible trace in
+[`retrieval-synthesis-benchmark.md`](retrieval-synthesis-benchmark.md).
 
 ```text
-Search the public pawprint docs for the authentication requirements and the
-errors returned when creating a user. Cite the relevant pages.
+Using only the public Smolify MCP, explain how Next.js 16.3 Instant Navigation
+and Partial Prefetching work. Compare Stream, Cache, and Block; list the config
+flags and migration gotchas. Then trace how navigateUsingPrefetchedRouteTree,
+readRouteCacheEntry, and fetchServerResponse implement the cache-hit and network
+fallback paths. Cite the docs and commit-pinned source lines.
+
+Show the retrieval evidence you used before giving the answer.
 ```
 
 **Say:**
 
-> The hosted site is not the end product. An agent connects to the same remote
-> MCP, searches before reading, and retrieves only the relevant pages. That
-> means the documentation is useful inside the coding workflow, without
-> stuffing an entire repository into every prompt.
+> Here is the important part: Smolify runs no embedding model and no hosted
+> answer model. Focused D1 BM25 queries find the official guides; exact source
+> metadata finds the implementation; and a bounded resolver reads two ranges
+> from the pinned Next.js commit. Codex synthesizes the DeepWiki-style answer
+> from that inspectable evidence. The resolver reports what it matched, what
+> remains unresolved, and its bounded scan cost—the intelligence stays in the
+> agent developers already use.
 
-### 2:20–2:38 — Scale and trust
+### 2:24–2:38 — Scale and trust
 
 **Show:** Open <https://app.smol.ly/explore/openclaw>. Point to the repository
 size, official-source badge if present, and community-review state. Do not claim
@@ -127,11 +138,10 @@ that “official source” is a security audit.
 
 **Say:**
 
-> This also works on large repositories. Smolify separates source provenance
-> from documentation quality: verified company-owned GitHub accounts can earn
-> an official-source badge, while ten independent authenticated reviews are
-> required for community-reviewed status. Agent improvements remain proposals;
-> only the project owner can activate them.
+> This works across large repositories while keeping trust signals separate.
+> Official source records provenance; independent agent reviews measure docs
+> quality. Improvements stay reviewable proposals, and only the project owner
+> can activate one.
 
 ### 2:38–2:52 — Close
 
@@ -155,8 +165,10 @@ Stop here. Do not fill the remaining seconds.
 2. The README installation section on GitHub
 3. `https://app.smol.ly/pawprint/introduction`
 4. One useful Pawprint API reference page
-5. `https://app.smol.ly/explore/openclaw`
-6. The signed-in dashboard or custom-domain screen, only if it is stable
+5. `https://app.smol.ly/next-js/introduction`
+6. `https://deepwiki.com/vercel/next.js`
+7. `https://app.smol.ly/explore/openclaw`
+8. The signed-in dashboard or custom-domain screen, only if it is stable
 
 Load every tab once before recording. Use a clean browser profile or hide the
 bookmarks bar and personal extensions.
@@ -167,7 +179,13 @@ bookmarks bar and personal extensions.
 - Complete the slow generation once before recording and leave the task at the
   final summary.
 - Keep one task showing the generated bundle diff and another showing the MCP
-  search result, or use clear checkpoints in one task.
+  synthesis trace, or use clear checkpoints in one task.
+- Deploy this branch and re-import `vercel/next.js` before recording; note the
+  new pinned revision and confirm the live project exposes the new MCP tools.
+- Prepare the Next.js benchmark exactly as recorded in
+  `docs/retrieval-synthesis-benchmark.md`. Keep the BM25 facets, exact symbol
+  page, two pinned source ranges, zero unresolved identifiers, and final
+  synthesis visible in that order.
 - Increase terminal and editor text until it remains readable in a 1080p video.
 - Run `bunx smoly install --agent codex` before recording. On camera, run only
   `bunx smoly status --agent codex`.
@@ -212,6 +230,12 @@ say:
 
 > Smolify shows source provenance separately from the community review state,
 > so users know exactly what has and has not been verified.
+
+If the comparison answer is slow to regenerate:
+
+> The retrieval trace on screen is live Smolify MCP output. I prepared the
+> synthesis from this same evidence so the recording does not wait on model
+> generation.
 
 ## Submission checklist outside the video
 

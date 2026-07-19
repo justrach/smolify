@@ -63,6 +63,8 @@ bundle, show me the complete diff, and stop before publishing.
 - Project-scoped publish tokens stored as SHA-256 hashes
 - Immutable documentation bundles stored in R2
 - D1 FTS5/BM25 search tuned for API identifiers and bounded agent results
+- Agent-side multi-page synthesis without a vector database, embedding model,
+  or hosted answer model
 - A production remote MCP with anonymous public discovery/search plus OAuth 2.1
   for private projects and write tools
 - A small TypeScript SDK for CI and other agents
@@ -74,6 +76,8 @@ bundle, show me the complete diff, and stop before publishing.
 - Guided, per-project onboarding for MCP authorization, skill installation, and first publish
 - One-field public GitHub import and bounded private repository ZIP upload
 - An immediate repository page, file map, and package-derived development page
+- Value-free public source-symbol and call-relationship pages with commit-pinned
+  line links; private and uploaded source remains metadata-only
 - Public Explore gallery with agent ratings and accepted-improvement counts
 - Private docs enforced across HTML pages, search APIs, and MCP reads
 - GPT-5.6 community ratings and full-bundle improvement proposals with owner-only review
@@ -112,6 +116,29 @@ local repository. The remote MCP authenticates, searches, publishes, rates, and
 stores proposed bundles, but only an owner can activate a proposal.
 See [docs/architecture.md](docs/architecture.md) for the tool and indexing
 contracts.
+
+## Retrieval, then agent synthesis
+
+Smolify deliberately keeps hosted retrieval simple and inspectable. D1
+FTS5/BM25 finds bounded passages and pages; the connected coding agent combines
+that evidence into an answer appropriate to the current task. Smolify does not
+need to generate embeddings or run a separate hosted answer model.
+
+The MCP's `build_docs_context` tool follows the same evidence-first shape as
+CodeDB: exact identifiers, focused lexical facets, low-value-page penalties,
+de-duplication, then bounded packing. Eligible public imports also use exact
+source-page paths as hints for a bounded pinned-tree symbol resolver. When an
+implementation detail is genuinely necessary,
+`read_public_source` can fetch at most 200 explicit lines from the immutable
+commit of an eligible public GitHub import. Smolify does not persist that body,
+and the tool is unavailable for private repositories and ZIP uploads.
+
+The reproducible [Next.js retrieval-to-synthesis benchmark](docs/retrieval-synthesis-benchmark.md)
+shows both levels: Codex synthesizes the Stream, Cache, Block, configuration,
+and migration explanation from focused docs evidence, then traces an internal
+cache-hit/network-fallback question from exact identifiers and two bounded,
+commit-pinned source ranges. The benchmark records where live DeepWiki was
+stronger, and which gap this branch closes without claiming universal parity.
 
 ## SDK sketch
 
@@ -157,8 +184,10 @@ From the dashboard, choose **Import a repository**:
 
 - Paste a public GitHub repository root URL. Smolify reads a bounded tree plus
   up to 30,000 supported text paths, a balanced set of first-party guides, and
-  representative app/package/extension READMEs. Imported guide content is
-  capped at 8 MB and fetched in bounded batches.
+  representative app/package/extension READMEs. It also analyzes up to 96
+  priority-plus-breadth public source files into declaration, import, and
+  call-relationship metadata with commit-pinned links. Imported guide content is capped at 8 MB,
+  public source analysis at 2 MB, and both are fetched in bounded batches.
 - Upload a ZIP for a private repository. ZIPs are limited to 12 MB compressed,
   30 MB expanded, 4,000 entries, and supported text files. Source is analyzed
   in memory; only the generated Markdown bundle and source paths are retained.
@@ -166,9 +195,12 @@ From the dashboard, choose **Import a repository**:
   reviews, or **Private** to require workspace membership everywhere.
 
 The instant scaffold includes the README introduction, package-derived setup,
-source-grounded guide pages, and chunked file-index pages searchable through
-D1 FTS5/BM25. It deliberately avoids inventing behavior. Run the Codex skill
-in the actual repository to turn the scaffold into reviewed API documentation.
+source-grounded guide pages, public symbol/call metadata when eligible, and
+chunked file-index pages searchable through exact identifier matching and D1
+FTS5/BM25. Search responses expose confidence, fallback use, identifier
+coverage, and source paths. The scaffold deliberately avoids inventing
+behavior. Run the Codex skill in the actual repository to turn it into reviewed
+API documentation.
 
 Production: <https://app.smol.ly>. The large-repository fixture is
 <https://app.smol.ly/explore/openclaw>.
@@ -266,11 +298,13 @@ The skill never prints a token.
 ### Community agent review
 
 Any agent can call `discover_public_projects`, `read_docs_structure`,
-`search_docs`, and `get_doc_page` for a public project. An authenticated
-GPT-5.6 agent can then call `rate_docs`. A complete improvement can be submitted
-with `propose_doc_improvement`; this stores an immutable pending bundle and does
-not change the live docs. The owner must preview the complete bundle and send
-its SHA-256 review hash before **Accept and publish** is enabled.
+`search_docs`, `build_docs_context`, `get_doc_page`, and—when the import is an
+eligible public GitHub snapshot—`resolve_public_symbols` and
+`read_public_source`. An authenticated GPT-5.6
+agent can then call `rate_docs`. A complete improvement can be submitted with
+`propose_doc_improvement`; this stores an immutable pending bundle and does not
+change the live docs. The owner must preview the complete bundle and send its
+SHA-256 review hash before **Accept and publish** is enabled.
 
 ## Verification
 

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { pageToSearchDocument, toFtsMatch } from "./search";
+import { contextSearchFacets, exactIdentifierCandidates, pageToSearchDocument, toFtsMatch } from "./search";
 
 describe("documentation search indexing", () => {
   it("adds aliases for code identifiers and source paths", () => {
@@ -19,5 +19,32 @@ describe("documentation search indexing", () => {
     expect(toFtsMatch('title:x OR "oops"')).not.toContain(" OR ");
     expect(toFtsMatch("getUserById")).toContain('"get" *');
     expect(toFtsMatch("getUserById", "any")).toContain(" OR ");
+  });
+
+  it("recognizes code identifiers without treating ordinary prose as exact", () => {
+    expect(exactIdentifierCandidates("trace navigateUsingPrefetchedRouteTree and get_errors in packages/next/src/server.ts"))
+      .toEqual([
+        "navigateUsingPrefetchedRouteTree",
+        "get_errors",
+        "packages/next/src/server.ts",
+    ]);
+    expect(exactIdentifierCandidates("explain instant navigation behavior")).toEqual([]);
+    expect(exactIdentifierCandidates(
+      "Explain Next.js navigation with navigateUsingPrefetchedRouteTree, readRouteCacheEntry, and fetchServerResponse",
+    )).toEqual([
+      "navigateUsingPrefetchedRouteTree",
+      "readRouteCacheEntry",
+      "fetchServerResponse",
+    ]);
+  });
+
+  it("turns natural tasks into focused retrieval facets", () => {
+    expect(contextSearchFacets(
+      "Explain Instant Navigation and Partial Prefetching; compare Stream, Cache, and Block; list flags and migration gotchas",
+    )).toEqual([
+      "Instant Navigation Partial Prefetching",
+      "Stream Cache Block",
+      "flags migration gotchas",
+    ]);
   });
 });

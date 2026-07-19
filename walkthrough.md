@@ -21,7 +21,7 @@ Usually, no.
 | --- | --- | --- | --- |
 | Existing local checkout, recommended | User's agent on their device | None | Reviewed docs bundle |
 | Clone a repository first | `git` or `gh` on the user's device | Managed locally by Git or GitHub CLI | Nothing during clone |
-| Paste a public GitHub URL | Smolify's Cloudflare Worker | Optional, but authenticated requests have more quota | Bounded source content used to build starter docs |
+| Paste a public GitHub URL | Smolify's Cloudflare Worker | Optional, but authenticated requests have more quota | Bounded guides plus value-free public symbol/call metadata used to build starter docs |
 | Paste a private GitHub URL | Smolify's Cloudflare Worker | User's connected GitHub OAuth token is required | Bounded source content used to build starter docs |
 | Upload a private ZIP | Smolify's Cloudflare Worker | None | ZIP analyzed in memory; generated docs bundle retained |
 | Publish and build BM25 search | Smolify's Cloudflare Worker | None; Smolify MCP OAuth authorizes the publish | Validated docs bundle |
@@ -203,11 +203,22 @@ The dashboard's existing **GitHub URL** path is server-side:
    secret, then to an unauthenticated public request;
 5. the Worker reads repository metadata, the recursive tree, and a bounded,
    balanced set of supported text files;
-6. the deterministic importer produces starter Markdown without calling a
+6. for a public repository, the Worker extracts declaration, import, and call
+   names from a bounded source set, discards implementation text and literal
+   values, and records commit-pinned source links; private repositories remain
+   metadata-only;
+7. the deterministic importer produces starter Markdown without calling a
    model;
-7. Smolify publishes and indexes that starter bundle;
-8. the dashboard sends the user into the local Codex flow to replace the
+8. Smolify publishes and indexes that starter bundle;
+9. the dashboard sends the user into the local Codex flow to replace the
    scaffold with reviewed documentation.
+
+For eligible public imports, later MCP reads can fetch one explicitly requested
+source path from that exact commit. Exact identifier misses may also check
+source-file hints and a ranked pinned-tree sample capped at 96 files/4 MB. The
+reader rejects traversal and sensitive/config paths, caps each upstream file at
+512 KB, returns bounded evidence, and does not persist the response. Private
+GitHub and ZIP imports cannot use this path.
 
 When GitHub OAuth is connected, the request is charged to that user's GitHub
 quota. However, the request still originates from Smolify's Worker and the

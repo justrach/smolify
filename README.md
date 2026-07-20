@@ -1,10 +1,10 @@
 # Smolify
 
-> **Ever wanted Mintlify-style polish, DeepWiki-inspired repository evidence,
-> and a Git diff before you let an agent publish?**
+> **Docs get stale. AI answers guess. Smolify makes both show their work.**
 
 Smolify turns an API repository into reviewed documentation for people and
-bounded, inspectable evidence for coding agents.
+commit-pinned evidence for coding agents—then shows you the complete Git diff
+before anything goes live.
 
 Codex reads the implementation on your device—routes, schemas, authentication,
 middleware, tests, and examples—then writes a portable Markdown bundle. You
@@ -81,11 +81,18 @@ In the branch-local live parity suite, on a pinned July 19, 2026
 `vercel/next.js` canary snapshot, Smolify's bounded retrieval found the
 implementation evidence needed for a segment-cache navigation trace:
 
+![Visual summary of Smolify's pinned Next.js retrieval benchmark; exact results follow in the table.](public/brand/smolify-nextjs-retrieval-trace.png)
+
+*Branch-local run on `vercel/next.js` commit
+`0491db047b8f9c4a5f9d0285ad9ed514bb134873` (July 19, 2026). One audited
+architecture task, not a universal answer-quality comparison; exact labels,
+retrieval-path scope, and limits follow.*
+
 | Audited check | Result |
 | --- | ---: |
 | Sampled identifiers captured | **5/5** |
-| Exact definitions resolved | **3/3** |
-| Relationship scan | **3 files · 204,948 bytes** |
+| Query definitions resolved | **3/3** |
+| Relationship scan | **3 files · 204,948 tree-accounted bytes** |
 | Cross-file connector | **`navigateImpl` reaches all 3** |
 | Evidence provenance | **2 commit-pinned excerpts** |
 | Embeddings / hosted answer model | **None / none** |

@@ -29,7 +29,7 @@ describe("commit-pinned public source reads", () => {
 
     expect(fetchMock).toHaveBeenCalledWith(
       `https://raw.githubusercontent.com/example/runtime/${commit}/src/navigation.ts`,
-      expect.objectContaining({ redirect: "error" }),
+      expect.objectContaining({ redirect: "manual" }),
     );
     expect(result.content).toBe("  return readRouteCacheEntry()\n}");
     expect(result.returnedRange).toEqual({ startLine: 2, endLine: 3 });
@@ -66,5 +66,16 @@ describe("commit-pinned public source reads", () => {
       publicProject,
       { path: "src/navigation.ts", startLine: 1, endLine: 10 },
     )).rejects.toThrow("512 KB");
+  });
+
+  it("does not follow upstream redirects", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(null, {
+      status: 302,
+      headers: { location: "https://example.invalid/source.ts" },
+    })));
+    await expect(readPublicSource(
+      publicProject,
+      { path: "src/navigation.ts", startLine: 1, endLine: 10 },
+    )).rejects.toThrow("Public source read failed (302)");
   });
 });

@@ -138,7 +138,10 @@ export async function fetchPublicSourceText(project: PublicSourceProject, inputP
   const rawUrl = `https://raw.githubusercontent.com/${encodeURIComponent(repository.owner)}/${encodeURIComponent(repository.repository)}/${project.sourceCommit}/${encodedPath}`;
   const response = await fetch(rawUrl, {
     headers: { "user-agent": "smolify-public-source-reader" },
-    redirect: "error",
+    // Workerd supports manual redirect handling, not the browser-only `error`
+    // mode. Keep redirects disabled so a repository path can never move the
+    // bounded reader to another origin.
+    redirect: "manual",
   });
   if (!response.ok) throw new Error(response.status === 404 ? "Source path was not found at the imported commit" : `Public source read failed (${response.status})`);
   const content = new TextDecoder("utf-8", { fatal: false }).decode(await boundedBody(response));

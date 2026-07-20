@@ -74,7 +74,9 @@ function githubHeaders(accessToken?: string) {
 }
 
 async function githubJson<T>(url: string, accessToken?: string) {
-  const response = await fetch(url, { headers: githubHeaders(accessToken), redirect: "error" });
+  // Workerd rejects redirect: "error". Manual mode preserves the security
+  // boundary because every 3xx remains non-ok and is rejected below.
+  const response = await fetch(url, { headers: githubHeaders(accessToken), redirect: "manual" });
   if (!response.ok) throw new Error(`Public symbol resolution failed (${response.status})`);
   return response.json() as Promise<T>;
 }

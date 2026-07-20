@@ -646,7 +646,7 @@ function fileIndexPages(files: RepositoryFile[], used: Set<string>) {
 function navigationGroup(label: string, pages: DocsPage[]) {
   return {
     label,
-    items: pages.map((page) => ({ label: page.title, slug: page.slug })),
+    items: pages.map((page) => ({ label: truncate(page.title, 80), slug: page.slug })),
   };
 }
 

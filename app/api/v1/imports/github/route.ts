@@ -1,6 +1,7 @@
 import { getCloudflareContext } from "@opennextjs/cloudflare";
 import { z } from "zod";
 import { createAuth } from "@/lib/auth";
+import { docsBundleSchema } from "@/lib/docs/schema";
 import { buildRepositoryBundle, fetchGithubSnapshot, parseGithubRepositoryUrl } from "@/lib/imports/repository";
 import { publishDocsDeployment } from "@/lib/docs/deployments";
 import { createProjectForUser, uniqueProjectSlug } from "@/lib/projects/service";
@@ -24,7 +25,7 @@ export async function POST(request: Request) {
     const github = parseGithubRepositoryUrl(parsed.data.url);
     const accessToken = await githubAccessTokenForUser(env, session.user.id);
     const snapshot = await fetchGithubSnapshot(github.url, accessToken);
-    const bundle = buildRepositoryBundle(snapshot);
+    const bundle = docsBundleSchema.parse(buildRepositoryBundle(snapshot));
     const slug = await uniqueProjectSlug(env, snapshot.name);
     const project = await createProjectForUser(env, session.user, {
       name: snapshot.name,

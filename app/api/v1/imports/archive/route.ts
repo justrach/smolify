@@ -1,5 +1,6 @@
 import { getCloudflareContext } from "@opennextjs/cloudflare";
 import { createAuth } from "@/lib/auth";
+import { docsBundleSchema } from "@/lib/docs/schema";
 import { buildRepositoryBundle, snapshotFromZip } from "@/lib/imports/repository";
 import { publishDocsDeployment } from "@/lib/docs/deployments";
 import { createProjectForUser, uniqueProjectSlug } from "@/lib/projects/service";
@@ -23,7 +24,7 @@ export async function POST(request: Request) {
       return Response.json({ error: "Repository uploads must be ZIP files" }, { status: 422 });
     }
     const snapshot = snapshotFromZip(new Uint8Array(await repository.arrayBuffer()), filename);
-    const bundle = buildRepositoryBundle(snapshot);
+    const bundle = docsBundleSchema.parse(buildRepositoryBundle(snapshot));
     const { env } = await getCloudflareContext({ async: true });
     const slug = await uniqueProjectSlug(env, snapshot.name);
     const project = await createProjectForUser(env, session.user, {

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { strToU8, zipSync } from "fflate";
+import { docsBundleSchema } from "@/lib/docs/schema";
 import {
   buildRepositoryBundle,
   parseGithubRepositoryUrl,
@@ -148,6 +149,26 @@ describe("repository imports", () => {
     expect(bundle.pages.some((page) => page.slug === "files/src")).toBe(true);
     expect(bundle.pages.every((page) => page.description.length <= 240)).toBe(true);
     expect(bundle.pages.every((page) => page.sourceFiles.length <= 100)).toBe(true);
+  });
+
+  it("bounds generated navigation labels to the portable bundle contract", () => {
+    const longTitle = "A deliberately long repository heading that exceeds the navigation label contract by a substantial margin";
+    const bundle = buildRepositoryBundle({
+      name: "Long labels",
+      description: "A repository with long imported headings",
+      sourceUrl: "https://github.com/example/long-labels",
+      revision: "main@abc123",
+      sourceCommit: "abc123",
+      sourceRetention: "public-symbols",
+      totalFiles: 2,
+      files: [
+        { path: "README.md", content: "# Long labels" },
+        { path: "docs/long-heading.md", content: `# ${longTitle}\n\nSource-grounded details.` },
+      ],
+    });
+
+    expect(Math.max(...bundle.navigation.flatMap((group) => group.items.map((item) => item.label.length)))).toBeLessThanOrEqual(80);
+    expect(() => docsBundleSchema.parse(bundle)).not.toThrow();
   });
 
   it("imports a bounded ZIP without retaining the archive", () => {

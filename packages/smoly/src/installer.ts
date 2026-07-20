@@ -5,6 +5,7 @@ import { randomUUID } from "node:crypto";
 export const DEFAULT_ENDPOINT = "https://app.smol.ly";
 export const MCP_SERVER_NAME = "smolify";
 export const SKILL_NAME = "smolify-api-docs";
+export const REMOTE_BRIDGE_VERSION = "0.1.38";
 
 export type AgentId =
   | "codex"
@@ -22,20 +23,36 @@ type AgentTarget = {
   id: AgentId;
   label: string;
   relativePath: string;
-  style: "codex" | "json" | "claude";
+  style: AgentStyle;
+  scope?: "home" | "project";
+  detectionPath?: string;
 };
 
+export type JsonStyle =
+  | "standard"
+  | "claude"
+  | "gemini"
+  | "devin"
+  | "graff"
+  | "forge"
+  | "cursor"
+  | "windsurf"
+  | "opencode"
+  | "droid";
+
+type AgentStyle = "codex" | JsonStyle;
+
 export const AGENT_TARGETS: readonly AgentTarget[] = [
-  { id: "codex", label: "Codex", relativePath: ".codex/config.toml", style: "codex" },
-  { id: "claude", label: "Claude Code", relativePath: ".claude.json", style: "claude" },
-  { id: "gemini", label: "Gemini", relativePath: ".gemini/settings.json", style: "json" },
-  { id: "devin", label: "Devin", relativePath: ".config/devin/config.json", style: "json" },
-  { id: "graff", label: "Graff", relativePath: "codegraff/.mcp.json", style: "json" },
-  { id: "forge", label: "Forge", relativePath: "forge/mcp.json", style: "json" },
-  { id: "cursor", label: "Cursor", relativePath: ".cursor/mcp.json", style: "json" },
-  { id: "windsurf", label: "Windsurf", relativePath: ".codeium/windsurf/mcp_config.json", style: "json" },
-  { id: "opencode", label: "OpenCode", relativePath: ".config/opencode/mcp.json", style: "json" },
-  { id: "droid", label: "Droid", relativePath: ".factory/mcp.json", style: "json" },
+  { id: "codex", label: "Codex", relativePath: ".codex/config.toml", style: "codex", detectionPath: ".codex" },
+  { id: "claude", label: "Claude Code", relativePath: ".claude.json", style: "claude", detectionPath: ".claude" },
+  { id: "gemini", label: "Gemini", relativePath: ".gemini/settings.json", style: "gemini", detectionPath: ".gemini" },
+  { id: "devin", label: "Devin", relativePath: ".config/devin/config.json", style: "devin", detectionPath: ".config/devin" },
+  { id: "graff", label: "Graff", relativePath: ".mcp.json", style: "graff", scope: "project" },
+  { id: "forge", label: "Forge", relativePath: "forge/.mcp.json", style: "forge", detectionPath: "forge" },
+  { id: "cursor", label: "Cursor", relativePath: ".cursor/mcp.json", style: "cursor", detectionPath: ".cursor" },
+  { id: "windsurf", label: "Windsurf", relativePath: ".codeium/windsurf/mcp_config.json", style: "windsurf", detectionPath: ".codeium/windsurf" },
+  { id: "opencode", label: "OpenCode", relativePath: ".config/opencode/opencode.json", style: "opencode", detectionPath: ".config/opencode" },
+  { id: "droid", label: "Droid", relativePath: ".factory/mcp.json", style: "droid", detectionPath: ".factory" },
 ];
 
 export type InstallerAction = {
@@ -48,6 +65,7 @@ export type InstallerAction = {
 
 export type InstallerOptions = {
   home: string;
+  cwd?: string;
   endpoint?: string;
   agents?: AgentId[];
   dryRun?: boolean;
@@ -76,18 +94,39 @@ export function normalizeEndpoint(endpoint: string) {
   return parsed.toString().replace(/\/$/, "");
 }
 
-function jsonEntry(endpoint: string, claude = false) {
-  return claude
-    ? { type: "http", url: `${endpoint}/mcp` }
-    : { url: `${endpoint}/mcp`, transport: "http" };
+function jsonEntry(endpoint: string, style: JsonStyle) {
+  const url = `${endpoint}/mcp`;
+  switch (style) {
+    case "claude":
+      return { type: "http", url };
+    case "gemini":
+      return { httpUrl: url };
+    case "devin":
+    case "forge":
+    case "cursor":
+      return { url };
+    case "graff":
+      return { command: "npx", args: ["-y", `mcp-remote@${REMOTE_BRIDGE_VERSION}`, url] };
+    case "windsurf":
+      return { serverUrl: url };
+    case "opencode":
+      return { type: "remote", url, enabled: true };
+    case "droid":
+      return { type: "http", url, disabled: false };
+    case "standard":
+      return { url, transport: "http" };
+  }
 }
 
 export function patchJsonMcpConfig(
   source: string,
   endpoint: string,
   operation: "install" | "uninstall",
-  claude = false,
+  requestedStyle: JsonStyle | boolean = "standard",
 ) {
+  const style = typeof requestedStyle === "boolean"
+    ? requestedStyle ? "claude" : "standard"
+    : requestedStyle;
   let parsed: Record<string, unknown>;
   try {
     parsed = source.trim() ? JSON.parse(source) as Record<string, unknown> : {};
@@ -97,13 +136,14 @@ export function patchJsonMcpConfig(
   if (!parsed || Array.isArray(parsed) || typeof parsed !== "object") {
     throw new Error("Agent configuration must be a JSON object");
   }
-  const current = parsed.mcpServers;
+  const containerKey = style === "opencode" ? "mcp" : "mcpServers";
+  const current = parsed[containerKey];
   const servers = current && !Array.isArray(current) && typeof current === "object"
     ? { ...(current as Record<string, unknown>) }
     : {};
-  if (operation === "install") servers[MCP_SERVER_NAME] = jsonEntry(endpoint, claude);
+  if (operation === "install") servers[MCP_SERVER_NAME] = jsonEntry(endpoint, style);
   else delete servers[MCP_SERVER_NAME];
-  parsed.mcpServers = servers;
+  parsed[containerKey] = servers;
   return `${JSON.stringify(parsed, null, 2)}\n`;
 }
 
@@ -152,15 +192,22 @@ async function readConfig(path: string, fallback: string) {
   }
 }
 
-async function selectedTargets(home: string, agents?: AgentId[]) {
+function targetPath(home: string, cwd: string, target: AgentTarget) {
+  return join(target.scope === "project" ? cwd : home, target.relativePath);
+}
+
+async function selectedTargets(home: string, cwd: string, agents?: AgentId[]) {
   if (agents?.length) {
     const selected = new Set(agents);
     return AGENT_TARGETS.filter((target) => selected.has(target.id));
   }
   const detected: AgentTarget[] = [];
   for (const target of AGENT_TARGETS) {
-    const path = join(home, target.relativePath);
-    if (await exists(path) || await exists(dirname(path))) detected.push(target);
+    const path = targetPath(home, cwd, target);
+    const detectionPath = target.detectionPath
+      ? join(target.scope === "project" ? cwd : home, target.detectionPath)
+      : null;
+    if (await exists(path) || (detectionPath && await exists(detectionPath))) detected.push(target);
   }
   return detected.length ? detected : AGENT_TARGETS.filter((target) => target.id === "codex");
 }
@@ -168,7 +215,7 @@ async function selectedTargets(home: string, agents?: AgentId[]) {
 async function updateConfig(
   path: string,
   label: string,
-  style: AgentTarget["style"],
+  style: AgentStyle,
   endpoint: string,
   operation: "install" | "uninstall",
   dryRun: boolean,
@@ -176,7 +223,7 @@ async function updateConfig(
   const before = await readConfig(path, style === "codex" ? "" : "{}\n");
   const after = style === "codex"
     ? patchCodexMcpConfig(before, endpoint, operation)
-    : patchJsonMcpConfig(before, endpoint, operation, style === "claude");
+    : patchJsonMcpConfig(before, endpoint, operation, style);
   const changed = before !== after;
   if (changed && !dryRun) await atomicWrite(path, after);
   return { kind: "mcp", label, path, changed, removed: operation === "uninstall" } satisfies InstallerAction;
@@ -209,17 +256,18 @@ export async function runInstaller(
   options: InstallerOptions,
 ) {
   const endpoint = normalizeEndpoint(options.endpoint ?? DEFAULT_ENDPOINT);
+  const cwd = options.cwd ?? process.cwd();
   const dryRun = options.dryRun ?? false;
   const installMcp = options.installMcp ?? true;
   const installSkill = options.installSkill ?? true;
-  const targets = await selectedTargets(options.home, options.agents);
+  const targets = await selectedTargets(options.home, cwd, options.agents);
   const actions: InstallerAction[] = [];
 
   if (operation === "status") {
     const sourcePath = join(options.home, ".mcpconfig.json");
     const candidates = [
-      { label: "mcpsync source", path: sourcePath, style: "json" as const },
-      ...targets.map((target) => ({ label: target.label, path: join(options.home, target.relativePath), style: target.style })),
+      { label: "mcpsync source", path: sourcePath, style: "standard" as const },
+      ...targets.map((target) => ({ label: target.label, path: targetPath(options.home, cwd, target), style: target.style })),
     ];
     for (const candidate of candidates) {
       const content = await readConfig(candidate.path, "");
@@ -227,8 +275,12 @@ export async function runInstaller(
         ? /\[mcp_servers\.(?:"smolify"|smolify)]/.test(content)
         : (() => {
             try {
-              const parsed = JSON.parse(content || "{}") as { mcpServers?: Record<string, unknown> };
-              return Boolean(parsed.mcpServers?.[MCP_SERVER_NAME]);
+              const parsed = JSON.parse(content || "{}") as {
+                mcp?: Record<string, unknown>;
+                mcpServers?: Record<string, unknown>;
+              };
+              const servers = candidate.style === "opencode" ? parsed.mcp : parsed.mcpServers;
+              return Boolean(servers?.[MCP_SERVER_NAME]);
             } catch {
               return false;
             }
@@ -244,14 +296,14 @@ export async function runInstaller(
     actions.push(await updateConfig(
       join(options.home, ".mcpconfig.json"),
       "mcpsync source",
-      "json",
+      "standard",
       endpoint,
       operation,
       dryRun,
     ));
     for (const target of targets) {
       actions.push(await updateConfig(
-        join(options.home, target.relativePath),
+        targetPath(options.home, cwd, target),
         target.label,
         target.style,
         endpoint,

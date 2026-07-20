@@ -6,6 +6,7 @@ import test from "node:test";
 import {
   patchCodexMcpConfig,
   patchJsonMcpConfig,
+  REMOTE_BRIDGE_VERSION,
   runInstaller,
   shouldAutoInstall,
 } from "../dist/installer.js";
@@ -22,6 +23,33 @@ test("JSON configuration is additive and preserves foreign servers", () => {
   const removed = JSON.parse(patchJsonMcpConfig(JSON.stringify(installed), "https://app.smol.ly", "uninstall"));
   assert.equal(removed.mcpServers.smolify, undefined);
   assert.ok(removed.mcpServers.deepwiki);
+});
+
+test("each client receives its current remote MCP schema", () => {
+  const endpoint = "https://app.smol.ly/mcp";
+  const cases = [
+    ["claude", "mcpServers", { type: "http", url: endpoint }],
+    ["gemini", "mcpServers", { httpUrl: endpoint }],
+    ["devin", "mcpServers", { url: endpoint }],
+    ["graff", "mcpServers", { command: "npx", args: ["-y", `mcp-remote@${REMOTE_BRIDGE_VERSION}`, endpoint] }],
+    ["forge", "mcpServers", { url: endpoint }],
+    ["cursor", "mcpServers", { url: endpoint }],
+    ["windsurf", "mcpServers", { serverUrl: endpoint }],
+    ["opencode", "mcp", { type: "remote", url: endpoint, enabled: true }],
+    ["droid", "mcpServers", { type: "http", url: endpoint, disabled: false }],
+  ];
+
+  for (const [style, container, expected] of cases) {
+    const source = JSON.stringify({ untouched: true, [container]: { foreign: { command: "foreign" } } });
+    const installed = JSON.parse(patchJsonMcpConfig(source, "https://app.smol.ly", "install", style));
+    assert.equal(installed.untouched, true);
+    assert.deepEqual(installed[container].foreign, { command: "foreign" });
+    assert.deepEqual(installed[container].smolify, expected);
+
+    const removed = JSON.parse(patchJsonMcpConfig(JSON.stringify(installed), "https://app.smol.ly", "uninstall", style));
+    assert.equal(removed[container].smolify, undefined);
+    assert.deepEqual(removed[container].foreign, { command: "foreign" });
+  }
 });
 
 test("Codex TOML patch replaces only the Smolify block", () => {
@@ -58,6 +86,41 @@ test("installer writes atomically to selected agents and installs the shared ski
   assert.ok(after.mcpServers.foreign);
   assert.equal(after.mcpServers.smolify, undefined);
   await assert.rejects(readFile(join(home, ".agents/skills/smolify-api-docs/SKILL.md"), "utf8"), /ENOENT/);
+});
+
+test("all-agent install uses current global and project config paths", async (context) => {
+  const home = await mkdtemp(join(tmpdir(), "smoly-all-agents-"));
+  const cwd = join(home, "workspace");
+  await mkdir(cwd, { recursive: true });
+  context.after(() => rm(home, { recursive: true, force: true }));
+  const agents = ["codex", "claude", "gemini", "devin", "graff", "forge", "cursor", "windsurf", "opencode", "droid"];
+
+  await runInstaller("install", { home, cwd, agents, skillSource });
+
+  const graff = JSON.parse(await readFile(join(cwd, ".mcp.json"), "utf8"));
+  const forge = JSON.parse(await readFile(join(home, "forge/.mcp.json"), "utf8"));
+  const opencode = JSON.parse(await readFile(join(home, ".config/opencode/opencode.json"), "utf8"));
+  assert.equal(graff.mcpServers.smolify.command, "npx");
+  assert.equal(forge.mcpServers.smolify.url, "https://app.smol.ly/mcp");
+  assert.equal(opencode.mcp.smolify.type, "remote");
+
+  const status = await runInstaller("status", { home, cwd, agents, skillSource });
+  assert.ok(status.every((action) => action.changed));
+
+  await runInstaller("uninstall", { home, cwd, agents, skillSource });
+  const after = await runInstaller("status", { home, cwd, agents, skillSource });
+  assert.ok(after.every((action) => !action.changed));
+});
+
+test("auto-detection does not mistake the home directory for Claude Code", async (context) => {
+  const home = await mkdtemp(join(tmpdir(), "smoly-detect-"));
+  const cwd = join(home, "workspace");
+  await mkdir(cwd, { recursive: true });
+  context.after(() => rm(home, { recursive: true, force: true }));
+
+  const actions = await runInstaller("install", { home, cwd, skillSource });
+  assert.deepEqual(actions.filter((action) => action.kind === "mcp").map((action) => action.label), ["mcpsync source", "Codex"]);
+  await assert.rejects(readFile(join(home, ".claude.json"), "utf8"), /ENOENT/);
 });
 
 test("postinstall auto-registration is global-only and can be overridden", () => {

@@ -61,6 +61,7 @@ async function main() {
   const skillSource = fileURLToPath(new URL("./skill", import.meta.url));
   const actions = await runInstaller(command as "install" | "uninstall" | "status", {
     home: homedir(),
+    cwd: process.cwd(),
     endpoint,
     agents,
     dryRun,

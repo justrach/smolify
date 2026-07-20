@@ -12,6 +12,7 @@ async function main() {
   const skillSource = fileURLToPath(new URL("./skill", import.meta.url));
   const actions = await runInstaller("install", {
     home: homedir(),
+    cwd: process.cwd(),
     endpoint: DEFAULT_ENDPOINT,
     skillSource,
   });

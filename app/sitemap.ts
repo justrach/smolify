@@ -22,6 +22,8 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   return [
     { url: "https://app.smol.ly", changeFrequency: "daily", priority: 1 },
     { url: "https://app.smol.ly/explore", changeFrequency: "daily", priority: 0.9 },
+    { url: "https://app.smol.ly/privacy", changeFrequency: "monthly", priority: 0.3 },
+    { url: "https://app.smol.ly/terms", changeFrequency: "monthly", priority: 0.3 },
     ...[...projectEntries].map(([project, updatedAt]) => ({
       url: `https://app.smol.ly/explore/${project}`,
       lastModified: new Date(updatedAt),

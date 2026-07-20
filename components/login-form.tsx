@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { authClient } from "@/lib/auth-client";
 import { Brand } from "@/components/brand";
 
@@ -17,6 +18,7 @@ export function LoginForm({ githubEnabled }: { githubEnabled: boolean }) {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [termsAccepted, setTermsAccepted] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
 
@@ -57,6 +59,10 @@ export function LoginForm({ githubEnabled }: { githubEnabled: boolean }) {
         <form
           onSubmit={async (event) => {
             event.preventDefault();
+            if (mode === "signup" && !termsAccepted) {
+              setError("Accept the Terms of Use and acknowledge the Privacy Policy to create an account.");
+              return;
+            }
             setPending(true);
             setError(null);
             const result = mode === "signin"
@@ -70,10 +76,17 @@ export function LoginForm({ githubEnabled }: { githubEnabled: boolean }) {
           {mode === "signup" && <label>Name<input required autoComplete="name" value={name} onChange={(event) => setName(event.target.value)} /></label>}
           <label>Email<input required type="email" autoComplete="email" value={email} onChange={(event) => setEmail(event.target.value)} /></label>
           <label>Password<input required minLength={8} type="password" autoComplete={mode === "signin" ? "current-password" : "new-password"} value={password} onChange={(event) => setPassword(event.target.value)} /></label>
+          {mode === "signup" && (
+            <label className="terms-acceptance">
+              <input required type="checkbox" checked={termsAccepted} onChange={(event) => setTermsAccepted(event.target.checked)} />
+              <span>I agree to the <Link href="/terms" target="_blank">Terms of Use</Link> and acknowledge the <Link href="/privacy" target="_blank">Privacy Policy</Link>.</span>
+            </label>
+          )}
           {error && <p className="form-error">{error}</p>}
           <button className="button" disabled={pending}>{pending ? "Working…" : mode === "signin" ? "Sign in" : "Create account"}</button>
         </form>
-        <button className="mode-switch" onClick={() => setMode(mode === "signin" ? "signup" : "signin")}>{mode === "signin" ? "New to Smolify? Create an account" : "Already have an account? Sign in"}</button>
+        {mode === "signin" && <a className="account-help-link" href="mailto:support@smol.ly?subject=Smolify%20account%20recovery">Forgot your password? Contact support</a>}
+        <button className="mode-switch" onClick={() => { setError(null); setMode(mode === "signin" ? "signup" : "signin"); }}>{mode === "signin" ? "New to Smolify? Create an account" : "Already have an account? Sign in"}</button>
       </section>
     </main>
   );

@@ -39,6 +39,15 @@ customer OpenAI API key.
 - Documentation generation happens in Codex. A future Queue/Workflow may run
   indexing or post-publish checks; it is separate from OpenNext ISR queues.
 
+### Environment isolation
+
+Production runs as `smolify` at `app.smol.ly` with `smolify-db` and
+`smolify-docs`. Staging runs as `smolify-staging` at its dedicated
+`workers.dev` origin with `smolify-staging-db` and `smolify-staging-docs`.
+Bindings and Better Auth secrets are environment-specific; accounts, sessions,
+projects, bundles, and generated assets cannot cross between the two
+environments. Staging has no production or customer-domain route.
+
 ## Repository import boundary
 
 Public GitHub import accepts only a repository-root URL. It reads repository

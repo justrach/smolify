@@ -35,6 +35,30 @@
     "BETTER_AUTH_URL": "https://app.smol.ly"
   },
   "env": {
+    "staging": {
+      "name": "smolify-staging",
+      "workers_dev": true,
+      "preview_urls": false,
+      "routes": [],
+      "d1_databases": [
+        {
+          "binding": "DB",
+          "database_name": "smolify-staging-db",
+          "database_id": "967a7c2b-52b9-41d8-96fd-1093cf42f8a7",
+          "migrations_dir": "migrations"
+        }
+      ],
+      "r2_buckets": [
+        {
+          "binding": "DOCS",
+          "bucket_name": "smolify-staging-docs"
+        }
+      ],
+      "vars": {
+        "SMOLIFY_ROOT_DOMAIN": "smolify-staging.rachpradhan.workers.dev",
+        "BETTER_AUTH_URL": "https://smolify-staging.rachpradhan.workers.dev"
+      }
+    },
     "local": {
       "name": "smolify-local",
       "routes": [],

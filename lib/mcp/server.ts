@@ -4,6 +4,7 @@ import { docsBundleSchema } from "@/lib/docs/schema";
 import { publishDocsDeployment } from "@/lib/docs/deployments";
 import { getActiveDocPage, listActiveDocPages, searchActiveDocs } from "@/lib/docs/search-repository";
 import { buildDocsContext } from "@/lib/docs/context";
+import { packPublicSourceContext } from "@/lib/docs/source-context";
 import { readPublicSource } from "@/lib/imports/public-source";
 import { buildPublicSourceEvidence, resolvePublicSymbols } from "@/lib/imports/public-symbols";
 import { getAccessibleProject, getReadableProject, listAccessibleProjects, listPublicProjects } from "@/lib/projects/access";
@@ -214,7 +215,11 @@ export function createSmolifyMcpServer(
           { maxCharacters: sourceCharacterBudget, pathHints },
           env.GITHUB_TOKEN?.trim() || undefined,
         );
-        const sourceCharacters = source.evidence.reduce((sum, item) => sum + item.content.length, 0);
+        const packedSource = packPublicSourceContext(
+          source.resolution.graph,
+          source.evidence,
+          sourceCharacterBudget,
+        );
         return toolResult({
           ...context,
           sourceResolution: {
@@ -230,9 +235,11 @@ export function createSmolifyMcpServer(
               path: file.path,
               matchedSymbols: file.matchedSymbols,
             })),
+            graph: packedSource.graph,
+            graphAndEvidenceTruncated: packedSource.truncated,
           },
-          sourceEvidence: source.evidence,
-          approximateTokensUsed: context.approximateTokensUsed + Math.ceil(sourceCharacters / 4),
+          sourceEvidence: packedSource.evidence,
+          approximateTokensUsed: context.approximateTokensUsed + Math.ceil(packedSource.charactersUsed / 4),
           instruction: "Synthesize from the documentation and source evidence, cite sourceFiles and commit-pinned sourceUrl values, and label unresolved identifiers or uncertainty.",
         });
       } catch (error) {
@@ -267,6 +274,32 @@ export function createSmolifyMcpServer(
         readable,
         symbols,
         { maxResults, pathHints },
+        env.GITHUB_TOKEN?.trim() || undefined,
+      ));
+    },
+  );
+
+  server.registerTool(
+    "inspect_public_symbols",
+    {
+      title: "Inspect pinned public symbol relationships",
+      description:
+        "Build value-free CodeDB-style evidence for up to eight exact identifiers: definitions, scoped callers, callees, and short connector paths that reach multiple requested symbols. Relative imports are followed before the bounded 96-file/4-MB fallback scan. No source body is persisted.",
+      inputSchema: z.object({
+        project: z.string().min(1).max(120),
+        symbols: z.array(z.string().regex(/^[A-Za-z_$][\w$]{2,120}$/)).min(1).max(8),
+        pathHints: z.array(z.string().min(1).max(500)).max(20).optional(),
+        maxResults: z.number().int().min(1).max(20).default(8),
+      }),
+      annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
+    },
+    async ({ project, symbols, pathHints, maxResults }) => {
+      requireScope(principal, "docs:read");
+      const readable = await requireReadableProject(env, principal, project);
+      return toolResult(await resolvePublicSymbols(
+        readable,
+        symbols,
+        { maxResults, pathHints, includeRelationships: true },
         env.GITHUB_TOKEN?.trim() || undefined,
       ));
     },

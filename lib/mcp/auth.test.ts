@@ -19,8 +19,18 @@ describe("optional MCP authentication", () => {
 
   it("allows initialization and public read tools without OAuth", async () => {
     await expect(mcpRequestRequiresAuthentication(request("initialize"))).resolves.toBe(false);
-    await expect(mcpRequestRequiresAuthentication(request("tools/call", { name: "search_docs", arguments: {} }))).resolves.toBe(false);
-    await expect(mcpRequestRequiresAuthentication(request("tools/call", { name: "read_docs_structure", arguments: {} }))).resolves.toBe(false);
+    for (const name of [
+      "discover_public_projects",
+      "read_docs_structure",
+      "search_docs",
+      "get_doc_page",
+      "build_docs_context",
+      "resolve_public_symbols",
+      "inspect_public_symbols",
+      "read_public_source",
+    ]) {
+      await expect(mcpRequestRequiresAuthentication(request("tools/call", { name, arguments: {} }))).resolves.toBe(false);
+    }
   });
 
   it("requires OAuth at the HTTP layer for private and mutating tools", async () => {

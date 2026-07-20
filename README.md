@@ -1,48 +1,31 @@
 # Smolify
 
-> Your code knows the truth. Codex turns it into docs.
+> **Ever wanted Mintlify-style polish, DeepWiki-inspired repository evidence,
+> and a Git diff before you let an agent publish?**
 
-API documentation drifts when it is written somewhere away from the code.
-Routes change, authentication rules evolve, examples stop compiling, and the
-docs quietly become a liability.
+Smolify turns an API repository into reviewed documentation for people and
+bounded, inspectable evidence for coding agents.
 
-Smolify keeps documentation inside the development loop. Codex reads the actual
-API implementation on your device, reconciles routes with schemas, middleware,
-tests, and examples, then writes safe Markdown into a versioned bundle. You
-review the Git diff. Only then can Codex publish through Smolify's authenticated
-MCP.
-
-The result is one documentation system with two useful interfaces: a polished
-website for people and precise search and retrieval tools for coding agents.
+Codex reads the implementation on your device—routes, schemas, authentication,
+middleware, tests, and examples—then writes a portable Markdown bundle. You
+review the complete diff. Smolify validates and publishes it only after you
+approve.
 
 **Tiny setup. Serious docs.**
 
-[Live app](https://app.smol.ly) ·
-[Public docs demo](https://app.smol.ly/pawprint/introduction) ·
-[Large repository example](https://app.smol.ly/explore/openclaw) ·
+[Try Smolify](https://app.smol.ly) ·
+[Browse the Pawprint demo](https://app.smol.ly/pawprint/introduction) ·
+[Explore a large repository](https://app.smol.ly/explore/openclaw) ·
+[See the benchmark](BENCHMARK.md) ·
 [Architecture](docs/architecture.md) ·
 [Onboarding walkthrough](walkthrough.md)
 
-Smolify is open source and was built for OpenAI Build Week with GPT-5.6 and
-Codex. It uses an original Next.js renderer, does not use Fumadocs, and never
-executes runtime MDX. The product origin is `smol.ly`, hosted projects can use
-`{project}.smol.ly`, and teams can attach their own custom domain.
+![Smolify turns source-grounded repository knowledge into reviewed docs for people and inspectable evidence for agents.](public/brand/smolify-source-to-docs-hero.png)
 
-## From repository to hosted docs
-
-1. **Connect your agent.** Install the remote MCP and repository skill with one
-   command.
-2. **Generate locally.** Codex reads the checkout on your device and produces
-   `.smolify/smolify.bundle.json`. Smolify does not need the raw repository.
-3. **Review the evidence.** Every page can cite its supporting source files, and
-   the complete bundle remains a normal Git diff until you approve it.
-4. **Publish deliberately.** OAuth authorizes a project-scoped MCP call. The
-   server validates the full bundle before atomically activating it.
-5. **Use the docs everywhere.** People browse the hosted site. Agents search the
-   same deployment with bounded BM25 results and retrieve only relevant pages.
+## Try it in two commands
 
 ```bash
-bunx smoly install --agent codex
+bunx smolify install --agent codex
 codex mcp login smolify
 ```
 
@@ -54,40 +37,67 @@ routes, schemas, authentication, tests, and examples. Generate and validate the
 bundle, show me the complete diff, and stop before publishing.
 ```
 
-## What you get
+## How it works
 
-- Original Next.js documentation UI and Markdown rendering pipeline
-- Strict runtime bundle validation and sanitized HTML output
-- Better Auth email/password and optional GitHub OAuth on Cloudflare D1
-- Better Auth organizations for workspace membership
-- Project-scoped publish tokens stored as SHA-256 hashes
-- Immutable documentation bundles stored in R2
-- D1 FTS5/BM25 search tuned for API identifiers and bounded agent results
-- Agent-side multi-page synthesis without a vector database, embedding model,
-  or hosted answer model
-- A production remote MCP with anonymous public discovery/search plus OAuth 2.1
-  for private projects and write tools
-- A small TypeScript SDK for CI and other agents
-- Cloudflare for SaaS custom-hostname onboarding, validation status, and routing
-- OpenNext build targeting Cloudflare Workers
-- Installable `smolify-api-docs` Agent Skill with validation and publishing scripts
-- A dependency-free Bun/TypeScript `smoly` installer using the additive
-  `mcpsync` configuration model
-- Guided, per-project onboarding for MCP authorization, skill installation, and first publish
-- One-field public GitHub import and bounded private repository ZIP upload
-- An immediate repository page, file map, and package-derived development page
-- Value-free public source-symbol and call-relationship pages with commit-pinned
-  line links; private and uploaded source remains metadata-only
-- Public Explore gallery with agent ratings and accepted-improvement counts
-- Private docs enforced across HTML pages, search APIs, and MCP reads
-- GPT-5.6 community ratings and full-bundle improvement proposals with owner-only review
-- Public Pawprint API demo at `/pawprint/introduction`
+1. **Codex reads the real implementation locally.** Smolify does not need the
+   raw private repository.
+2. **It generates `.smolify/smolify.bundle.json`.** Pages contain safe Markdown
+   and machine-readable source provenance.
+3. **You review the complete Git diff.** Nothing publishes during generation.
+4. **Smolify validates and atomically publishes the approved bundle.** OAuth is
+   required for private reads and every write.
+5. **People browse it; agents search it.** Both use the same deployment.
 
-## Brand kit
+Smolify never executes generated MDX or arbitrary JSX. Hosted retrieval uses
+bounded FTS5/BM25 and structural source evidence—not embeddings or a separate
+hosted answer model. The connected coding agent performs the final synthesis.
 
-The brand guide, voice, colors, and usage rules live in
-[`docs/brand.md`](docs/brand.md). Reusable SVG assets are in
-[`public/brand`](public/brand).
+## One deployment, three audiences
+
+### For people
+
+- Original documentation UI built with Next.js, safe Markdown, and sanitized HTML
+- Project subdomains, custom domains, and immutable deployment history
+- Public discovery with separate provenance and community-review signals
+
+### For agents
+
+- Anonymous public discovery, search, bounded context, and page reads over MCP
+- Exact identifiers plus commit-pinned definitions, callers, callees, and
+  connector paths for eligible public imports
+- Agent-side synthesis without embeddings or a hosted answer model
+- Authenticated ratings and complete-bundle improvement proposals
+
+### For maintainers
+
+- Local-first repository analysis and Git-reviewable portable bundles
+- OAuth 2.1, project-scoped publish credentials, and owner-only acceptance
+- Tenant-scoped D1 metadata/search and immutable R2 artifacts
+- Bounded GitHub import, private ZIP import, CI SDK, and OpenNext deployment
+
+## Proof, not promises
+
+In the branch-local live parity suite, on a pinned July 19, 2026
+`vercel/next.js` canary snapshot, Smolify's bounded retrieval found the
+implementation evidence needed for a segment-cache navigation trace:
+
+| Audited check | Result |
+| --- | ---: |
+| Sampled identifiers captured | **5/5** |
+| Exact definitions resolved | **3/3** |
+| Relationship scan | **3 files · 204,948 bytes** |
+| Cross-file connector | **`navigateImpl` reaches all 3** |
+| Evidence provenance | **2 commit-pinned excerpts** |
+| Embeddings / hosted answer model | **None / none** |
+
+[Read the scorecard](BENCHMARK.md) ·
+[Inspect the full methodology and comparison](docs/retrieval-synthesis-benchmark.md) ·
+`npm run test:retrieval-parity`
+
+> This measures evidence retrieval for one audited architecture task—not
+> universal answer-quality superiority over DeepWiki or CodeDB. The recorded
+> public deployment predates these relationship tools; reproducing them through
+> the hosted MCP requires a fresh import and deployment.
 
 ## Architecture
 
@@ -106,39 +116,28 @@ API repository
                       └─ D1 metadata/search + immutable R2 bundles
 ```
 
-The design was checked against the DeepWiki documentation for
-`opennextjs/opennextjs-cloudflare`, `cloudflare/workers-sdk`,
-`better-auth/better-auth`, and `vercel/next.js` before implementation.
-
-The evolved agent model is: Smolify can make a useful, strictly bounded first
-page without a model call; Codex reads and authors the accurate version in the
-local repository. The remote MCP authenticates, searches, publishes, rates, and
-stores proposed bundles, but only an owner can activate a proposal.
-See [docs/architecture.md](docs/architecture.md) for the tool and indexing
-contracts.
+Smolify is an open-source, multi-tenant Next.js application built for OpenAI
+Build Week with GPT-5.6 and Codex. It uses an original renderer—not Fumadocs—and
+runs on Cloudflare through OpenNext. The remote MCP authenticates, searches,
+publishes, rates, and stores proposals, but only an owner can activate one.
 
 ## Retrieval, then agent synthesis
-
-Smolify deliberately keeps hosted retrieval simple and inspectable. D1
-FTS5/BM25 finds bounded passages and pages; the connected coding agent combines
-that evidence into an answer appropriate to the current task. Smolify does not
-need to generate embeddings or run a separate hosted answer model.
 
 The MCP's `build_docs_context` tool follows the same evidence-first shape as
 CodeDB: exact identifiers, focused lexical facets, low-value-page penalties,
 de-duplication, then bounded packing. Eligible public imports also use exact
-source-page paths as hints for a bounded pinned-tree symbol resolver. When an
+source-page paths as hints for a bounded pinned-tree symbol resolver.
+`inspect_public_symbols` follows relative imports and returns value-free exact
+definitions, scoped callers/callees, and short connector paths across requested
+symbols. The graph and excerpts share one hard serialized budget. When an
 implementation detail is genuinely necessary,
 `read_public_source` can fetch at most 200 explicit lines from the immutable
 commit of an eligible public GitHub import. Smolify does not persist that body,
 and the tool is unavailable for private repositories and ZIP uploads.
 
-The reproducible [Next.js retrieval-to-synthesis benchmark](docs/retrieval-synthesis-benchmark.md)
-shows both levels: Codex synthesizes the Stream, Cache, Block, configuration,
-and migration explanation from focused docs evidence, then traces an internal
-cache-hit/network-fallback question from exact identifiers and two bounded,
-commit-pinned source ranges. The benchmark records where live DeepWiki was
-stronger, and which gap this branch closes without claiming universal parity.
+[The reproducible benchmark](docs/retrieval-synthesis-benchmark.md) records the
+MCP trace, DeepWiki comparison, CodeDB design comparison, executable gates, and
+limits of the claim.
 
 ## SDK sketch
 
@@ -244,22 +243,30 @@ The cross-agent installer writes the additive `smolify` entry to
 at `~/.agents/skills/smolify-api-docs`:
 
 ```bash
-bunx smoly install
+bunx smolify install
 ```
 
-Or configure Codex directly:
-
-```bash
-codex mcp add smolify --url https://app.smol.ly/mcp
-```
-
-Authorize Codex when you want to contribute, read a private project, or publish:
+Authorize Codex only when you want to contribute, read a private project, or
+publish:
 
 ```bash
 codex mcp login smolify
 ```
 
-Then ask Codex inside the API repository:
+The two-command quick start is complete; `smoly` configures the MCP and installs
+the shared skill. Manual alternatives are available for troubleshooting and
+local skill development:
+
+<details>
+<summary><strong>Manual MCP and skill installation</strong></summary>
+
+Configure Codex directly:
+
+```bash
+codex mcp add smolify --url https://app.smol.ly/mcp
+```
+
+Ask Codex to install the repository skill:
 
 ```text
 Install the smolify-api-docs skill from
@@ -281,13 +288,7 @@ mkdir -p /path/to/api/.agents/skills
 cp -R skills/smolify-api-docs /path/to/api/.agents/skills/smolify-api-docs
 ```
 
-Then open that repository in Codex and ask:
-
-```text
-Use $smolify-api-docs to document this API. Analyze the implementation,
-contracts, schemas, middleware, and tests. Generate the bundle, validate it,
-and stop before publishing so I can review the diff.
-```
+</details>
 
 After review, ask Codex to publish with the authenticated MCP. For headless CI,
 set `SMOLIFY_PROJECT` and `SMOLIFY_PUBLISH_TOKEN` and use the skill's publishing
@@ -299,7 +300,8 @@ The skill never prints a token.
 
 Any agent can call `discover_public_projects`, `read_docs_structure`,
 `search_docs`, `build_docs_context`, `get_doc_page`, and—when the import is an
-eligible public GitHub snapshot—`resolve_public_symbols` and
+eligible public GitHub snapshot—`resolve_public_symbols`,
+`inspect_public_symbols`, and
 `read_public_source`. An authenticated GPT-5.6
 agent can then call `rate_docs`. A complete improvement can be submitted with
 `propose_doc_improvement`; this stores an immutable pending bundle and does not
@@ -307,6 +309,9 @@ change the live docs. The owner must preview the complete bundle and send its
 SHA-256 review hash before **Accept and publish** is enabled.
 
 ## Verification
+
+<details>
+<summary><strong>Run the complete local verification matrix</strong></summary>
 
 ```bash
 npm test
@@ -319,7 +324,12 @@ npm run test:e2e:mcp        # in another terminal
 npm run test:e2e:community  # public/private import + contribution review gate
 ```
 
-## Cloudflare setup
+</details>
+
+## Cloudflare deployment
+
+<details>
+<summary><strong>Provision D1, R2, secrets, and custom domains</strong></summary>
 
 For a fresh Cloudflare account, create the resources and put the returned D1
 database ID in `wrangler.jsonc`:
@@ -353,6 +363,15 @@ Customers can then enter `docs.example.com`, follow the returned CNAME/TXT
 instructions, and use **Check status** until the hostname and certificate are
 active. The Worker resolves active custom hosts from D1. It never mutates
 Wrangler configuration in response to an end-user request.
+
+</details>
+
+## Brand kit
+
+The README hero and product UI use the same Milk, Ink, Smol lime, Periwinkle,
+Mint, Line, and restrained Coral palette. Voice, tokens, and usage rules live in
+[`docs/brand.md`](docs/brand.md); reusable assets live in
+[`public/brand`](public/brand).
 
 ## License
 

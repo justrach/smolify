@@ -168,13 +168,14 @@ Explain the cache-hit path and the network fallback, and cite the implementation
 The production Smolify MCP available during the July 19 run did not yet expose
 the tools in this branch. Its search fell back to `matchMode: "any_term"` and
 returned conceptual navigation documentation rather than the requested
-implementation. DeepWiki found the internal flow and identified
-`packages/next/src/client/components/segment-cache/navigation.ts`, so it was
-materially better on that live implementation query.
+implementation. DeepWiki found the internal flow and identified the
+orchestration in `navigation.ts`, the cache definition in `cache.ts`, and the
+network primitive in `fetch-server-response.ts`, so it was materially better
+on that live implementation query.
 
-The branch was then exercised against the same current Next.js canary snapshot,
-`0491db047b8f9c4a5f9d0285ad9ed514bb134873`. These are observed results, not a
-forecast:
+The branch was then exercised against the pinned July 19, 2026 Next.js canary
+snapshot `0491db047b8f9c4a5f9d0285ad9ed514bb134873`. These are observed results,
+not a forecast:
 
 | Evidence check | Before source rebalance | This branch |
 | --- | ---: | ---: |
@@ -182,8 +183,10 @@ forecast:
 | Generated source-symbol pages | 78 | 50 |
 | Target `navigation.ts` fetched | No | Yes |
 | Five relevant identifiers captured | 0/5 | 5/5 |
-| Query identifiers resolved on demand | Not available | 3/3 |
+| Query definitions resolved on demand | Not available | 3/3 |
 | Unresolved query identifiers | 3 | 0 |
+| Scoped caller/callee edges | Not available | Returned |
+| Connector reaching all three symbols | Not available | `navigateImpl` |
 
 The five sampling checks were `navigateUsingPrefetchedRouteTree`,
 `readRouteCacheEntry`, `fetchServerResponse`, `navigateToUnknownRoute`, and
@@ -192,10 +195,22 @@ now reserves part of its unchanged 96-file/2-MB public-source allowance for
 high-value navigation, prefetch, scheduler, reducer, and resolver paths, then
 uses the remainder for repository breadth.
 
-With the exact source-page path supplied automatically as a hint, the bounded
-resolver stopped after one 39,795-byte file and resolved all three query
-identifiers. If hints are absent or incomplete it falls back to a ranked scan
-capped at 96 files/4 MB. It packed two complementary excerpts:
+With the exact source-page path supplied automatically as a hint, the
+relationship resolver followed its relative imports and stopped after three
+files totaling 204,948 tree-accounted bytes. It found these exact definitions:
+
+- `navigateUsingPrefetchedRouteTree` in `navigation.ts` at line 382;
+- `readRouteCacheEntry` in `cache.ts` at line 455; and
+- `fetchServerResponse` in `fetch-server-response.ts` at line 149.
+
+The value-free graph reports `navigateImpl → readRouteCacheEntry`,
+`navigateImpl → navigateUsingPrefetchedRouteTree`, and
+`navigateToUnknownRoute → fetchServerResponse`. Its short-path search also
+finds the connector
+`navigateImpl → navigateToUnknownRoute → fetchServerResponse`, so
+`navigateImpl` reaches all three requested symbols. If imports are absent or
+incomplete the resolver falls back to a ranked scan capped at 96 files/4 MB. It
+packed two complementary excerpts:
 
 - [`navigation.ts` lines 126–206](https://github.com/vercel/next.js/blob/0491db047b8f9c4a5f9d0285ad9ed514bb134873/packages/next/src/client/components/segment-cache/navigation.ts#L126-L206), covering `readRouteCacheEntry` and `navigateUsingPrefetchedRouteTree`;
 - [`navigation.ts` lines 476–516](https://github.com/vercel/next.js/blob/0491db047b8f9c4a5f9d0285ad9ed514bb134873/packages/next/src/client/components/segment-cache/navigation.ts#L476-L516), covering the `fetchServerResponse` fallback.
@@ -206,6 +221,28 @@ exact line ranges, bounded scan accounting, and an inspectable retrieval trace.
 It does **not** establish that Smolify is universally better than DeepWiki. A
 fresh import and deployment are still required before the public MCP can repeat
 this run, and the final prose quality still depends on the calling agent.
+
+## Executable parity contract
+
+The comparison is now a release-test contract rather than only a prose demo:
+
+```bash
+npm run test:retrieval-parity
+npm run test:retrieval-parity:live
+```
+
+The deterministic suite uses a Next.js-shaped fixture plus adversarial strings,
+comments, regex literals, malformed source, missing symbols, private-read
+boundaries, MCP annotations, and small/large context budgets. It gates exact
+identifier and definition recall, required scoped edges, the three-symbol
+connector, commit-pinned URLs, scan/evidence caps, docs-facet recall, and the
+no-embeddings/no-answer-model boundary.
+
+The opt-in live suite imports the current `vercel/next.js` canary, requires all
+five sampling identifiers, resolves the three architecture definitions in at
+most six files/4 MB, checks the `navigateImpl` connector and required call
+edges, and requires bounded source evidence. Network drift can change the
+pinned commit, but it cannot silently weaken these assertions.
 
 ## What this proves—and what it does not
 
@@ -224,10 +261,11 @@ files/4 MB. Unresolved identifiers remain explicit. This is still not an
 exhaustive hosted source corpus, semantic code index, or complete call graph.
 
 That limitation is about corpus coverage, not the absence of embeddings. The
-next useful experiment is to measure symbol/call pages plus bounded source reads
-on architecture questions and add reviewed architecture pages where structural
-relationships are insufficient. The agent applies the identical
-search-read-synthesize loop to both kinds of evidence.
+new relationship and live suites measure one architecture task rigorously;
+additional reviewed scenarios should cover cross-package indirection, dynamic
+dispatch, overloaded names, and languages beyond TypeScript. The agent applies
+the identical search-read-synthesize loop to both documentation and source
+evidence.
 
 ## Local CodeDB design comparison
 
@@ -239,9 +277,10 @@ dependency on it was introduced.
 | Retrieval concern | CodeDB pattern | Smolify adaptation |
 | --- | --- | --- |
 | Known identifiers | Exact symbol lookup is the primary tool | Exact newline-delimited symbol aliases run before BM25 |
-| Relationships | Callers, graph-resolved callees, and call paths | Value-free declaration and call-reference pages make definitions and referencing files exactly searchable |
+| Relationships | Callers, graph-resolved callees, and call paths | `inspect_public_symbols` derives value-free exact definitions, scoped callers/callees, and short connector paths from bounded public reads |
 | First-touch task | `codedb_context` extracts up to three identifiers and packs sections by value under `max_tokens` | `build_docs_context` extracts up to three identifiers, searches focused task facets, penalizes low-value structural pages, and fairly packs exact and BM25 evidence |
-| Detailed evidence | Local bounded source reads and optional symbol bodies | Exact source-page hints plus a bounded pinned-tree resolver select complementary source ranges; explicit reads remain available and fetched bodies are never persisted |
+| Detailed evidence | Local bounded source reads and optional symbol bodies | Exact source-page hints plus relative-import following and a bounded pinned-tree fallback select complementary source ranges; explicit reads remain available and fetched bodies are never persisted |
+| Budget discipline | Section admission and hard `max_tokens` tests | Graph sections and excerpts share a hard serialized cap with deterministic value ordering and monotonic budget tests |
 | Semantic infrastructure | No embeddings required | No embeddings and no hosted answer model; the MCP client synthesizes |
 
 The privacy boundary is intentionally different. CodeDB is a local code index

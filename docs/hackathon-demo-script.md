@@ -34,13 +34,13 @@ the background.
 install has already completed. Run only the quick status command on camera.
 
 ```bash
-bunx smoly status --agent codex
+bunx smolify status --agent codex
 ```
 
 Keep this fresh-install command visible in the README:
 
 ```bash
-bunx smoly install --agent codex
+bunx smolify install --agent codex
 ```
 
 **Say:**
@@ -106,7 +106,9 @@ reference page and run a search that uses an endpoint or error code.
 **Show:** Return to Codex and reveal the prepared public `next-js` challenge.
 First show `build_docs_context` reporting `embeddings: false` and
 `answerModel: false`, expand its facet-diverse docs pages, exact symbol match,
-and two commit-pinned source ranges, then reveal Codex's synthesized answer.
+then show `inspect_public_symbols` returning three definitions, scoped call
+edges, the `navigateImpl` connector, and two commit-pinned source ranges before
+revealing Codex's synthesized answer.
 Briefly show the same prompt's DeepWiki result beside it. Use the reproducible trace in
 [`retrieval-synthesis-benchmark.md`](retrieval-synthesis-benchmark.md).
 
@@ -124,8 +126,9 @@ Show the retrieval evidence you used before giving the answer.
 
 > Here is the important part: Smolify runs no embedding model and no hosted
 > answer model. Focused D1 BM25 queries find the official guides; exact source
-> metadata finds the implementation; and a bounded resolver reads two ranges
-> from the pinned Next.js commit. Codex synthesizes the DeepWiki-style answer
+> metadata finds the implementation; and a bounded resolver follows imports,
+> builds the value-free relationship path, and reads two ranges from the pinned
+> Next.js commit. Codex synthesizes the DeepWiki-style answer
 > from that inspectable evidence. The resolver reports what it matched, what
 > remains unresolved, and its bounded scan cost—the intelligence stays in the
 > agent developers already use.
@@ -187,8 +190,8 @@ bookmarks bar and personal extensions.
   page, two pinned source ranges, zero unresolved identifiers, and final
   synthesis visible in that order.
 - Increase terminal and editor text until it remains readable in a 1080p video.
-- Run `bunx smoly install --agent codex` before recording. On camera, run only
-  `bunx smoly status --agent codex`.
+- Run `bunx smolify install --agent codex` before recording. On camera, run
+  only `bunx smolify status --agent codex`.
 - If the `smoly` package is not publicly available by recording time, show the
   direct Codex setup instead and do not pretend the package install works:
 

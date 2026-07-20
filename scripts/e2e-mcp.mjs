@@ -143,7 +143,7 @@ assert.equal(initialized.result.serverInfo.name, "smolify");
 const tools = await rpc("tools/list", {});
 assert.deepEqual(
   tools.result.tools.map((tool) => tool.name).sort(),
-  ["discover_public_projects", "get_doc_page", "list_projects", "propose_doc_improvement", "publish_docs", "rate_docs", "read_docs_structure", "search_docs", "whoami"],
+  ["build_docs_context", "discover_public_projects", "get_doc_page", "inspect_public_symbols", "list_projects", "propose_doc_improvement", "publish_docs", "rate_docs", "read_docs_structure", "read_public_source", "resolve_public_symbols", "search_docs", "whoami"],
 );
 
 const bundle = JSON.parse(await readFile(new URL("../examples/pawprint/smolify.bundle.json", import.meta.url)));

@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 const packageRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const repositoryRoot = resolve(packageRoot, "../..");
 const output = resolve(packageRoot, "dist");
+const manifest = await Bun.file(resolve(packageRoot, "package.json")).json();
 
 await rm(output, { recursive: true, force: true });
 await mkdir(output, { recursive: true });
@@ -16,6 +17,7 @@ const result = await Bun.build({
   minify: false,
   sourcemap: "external",
   banner: "#!/usr/bin/env node",
+  define: { SMOLY_VERSION: JSON.stringify(manifest.version) },
 });
 if (!result.success) {
   for (const log of result.logs) console.error(log);

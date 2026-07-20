@@ -1,6 +1,6 @@
 {
-  "name": "smoly",
-  "version": "0.1.0",
+  "name": "smolify",
+  "version": "0.0.1",
   "description": "Install the Smolify MCP and agent skill across coding agents.",
   "type": "module",
   "bin": {

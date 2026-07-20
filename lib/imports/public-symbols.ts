@@ -6,10 +6,15 @@ import {
   readPublicSource,
   type PublicSourceProject,
 } from "./public-source";
+import { analyzeSourceStructure, type SourceDefinition } from "./source-analysis";
 
 const SOURCE_FILE = /\.(?:ts|tsx|js|jsx|mjs|cjs|py|rb|rs|go|java|kt|kts|swift|php|cs|c|cc|cpp|h|hpp)$/i;
 const LOW_VALUE_PATH = /(?:^|\/)(?:tests?|spec|__tests__|fixtures?|benchmarks?|examples?|generated|\.generated)(?:\/|$)|\.(?:test|spec|stories)\.[^.]+$|\.min\.[^.]+$/i;
 const MAX_SCAN_BYTES = 4 * 1024 * 1024;
+const LOW_SIGNAL_CALLEES = new Set([
+  "URL", "all", "endsWith", "error", "get", "has", "includes", "set",
+  "startsWith", "toJSON", "toString",
+]);
 
 type TreeBlob = { path: string; type: "blob" | "tree"; size?: number };
 
@@ -18,6 +23,10 @@ export type PublicSymbolOccurrence = {
   line: number;
   kind: "declaration" | "import" | "reference";
   sourceUrl: string;
+  scopeName: string | null;
+  scopeKind: string | null;
+  scopeStartLine: number | null;
+  scopeEndLine: number | null;
 };
 
 export type PublicSymbolFile = {
@@ -25,6 +34,34 @@ export type PublicSymbolFile = {
   matchedSymbols: string[];
   occurrences: PublicSymbolOccurrence[];
   pathScore: number;
+};
+
+export type PublicGraphDefinition = SourceDefinition & {
+  path: string;
+  sourceUrl: string;
+};
+
+export type PublicCallEdge = {
+  from: string;
+  to: string;
+  path: string;
+  line: number;
+  sourceUrl: string;
+  scopeKind: string | null;
+  scopeStartLine: number | null;
+  scopeEndLine: number | null;
+};
+
+export type PublicSymbolGraph = {
+  definitionCoverage: { matched: string[]; unresolved: string[] };
+  definitions: PublicGraphDefinition[];
+  callers: PublicCallEdge[];
+  callees: PublicCallEdge[];
+  connectors: Array<{
+    symbol: string;
+    paths: Array<{ target: string; symbols: string[] }>;
+    reaches: string[];
+  }>;
 };
 
 function githubHeaders(accessToken?: string) {
@@ -85,30 +122,95 @@ function safeCandidate(path: string) {
   }
 }
 
-function escapeRegex(value: string) {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
-
-function occurrenceKind(line: string, symbol: string): PublicSymbolOccurrence["kind"] | null {
-  const trimmed = line.trim();
-  if (!trimmed || /^(?:\/\/|#|\*|\/\*)/.test(trimmed)) return null;
-  const escaped = escapeRegex(symbol);
-  if (/\b(?:import|from|require)\b/.test(line)) return "import";
-  const declaration = new RegExp(
-    `(?:\\b(?:function|class|interface|type|enum|struct|trait|def|fn)\\s+${escaped}\\b|\\b(?:const|let|var|static)\\s+${escaped}\\b|\\bfunc\\s+(?:\\([^)]*\\)\\s*)?${escaped}\\b)`,
-  );
-  return declaration.test(line) ? "declaration" : "reference";
-}
-
 function sourceLineUrl(project: PublicSourceProject, path: string, line: number) {
   const encodedPath = path.split("/").map(encodeURIComponent).join("/");
   return `${project.sourceUrl}/blob/${project.sourceCommit}/${encodedPath}#L${line}`;
 }
 
+function relativeImportCandidates(path: string, module: string) {
+  if (!module.startsWith(".")) return [];
+  const parts = path.split("/").slice(0, -1);
+  for (const part of module.split("/")) {
+    if (!part || part === ".") continue;
+    if (part === "..") parts.pop();
+    else parts.push(part);
+  }
+  const base = parts.join("/");
+  if (SOURCE_FILE.test(base)) return [base];
+  const extensions = [".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".py", ".rb", ".rs", ".go"];
+  return [
+    ...extensions.map((extension) => `${base}${extension}`),
+    ...extensions.map((extension) => `${base}/index${extension}`),
+  ];
+}
+
+function shortestPath(adjacency: Map<string, string[]>, from: string, to: string, maxHops = 4) {
+  const queue: string[][] = [[from]];
+  const visited = new Set([from]);
+  while (queue.length) {
+    const path = queue.shift();
+    if (!path) break;
+    if (path.length - 1 >= maxHops) continue;
+    for (const next of adjacency.get(path.at(-1) as string) ?? []) {
+      const candidate = [...path, next];
+      if (next === to) return candidate;
+      if (visited.has(next)) continue;
+      visited.add(next);
+      queue.push(candidate);
+    }
+  }
+  return null;
+}
+
+function publicGraph(
+  requested: string[],
+  definitions: PublicGraphDefinition[],
+  edges: PublicCallEdge[],
+): PublicSymbolGraph {
+  const requestedSet = new Set(requested);
+  const usefulEdges = edges.filter((edge) =>
+    requestedSet.has(edge.to) || !LOW_SIGNAL_CALLEES.has(edge.to),
+  );
+  const requestedDefinitions = definitions
+    .filter((definition) => requestedSet.has(definition.name))
+    .sort((left, right) => Number(LOW_VALUE_PATH.test(left.path)) - Number(LOW_VALUE_PATH.test(right.path))
+      || left.path.localeCompare(right.path)
+      || left.line - right.line)
+    .slice(0, 32);
+  const adjacency = new Map<string, string[]>();
+  for (const edge of usefulEdges) {
+    const targets = adjacency.get(edge.from) ?? [];
+    if (!targets.includes(edge.to)) targets.push(edge.to);
+    adjacency.set(edge.from, targets);
+  }
+  const connectors = [...adjacency.keys()].map((symbol) => {
+    const paths = requested
+      .map((target) => ({ target, symbols: shortestPath(adjacency, symbol, target) }))
+      .filter((entry): entry is { target: string; symbols: string[] } => Boolean(entry.symbols));
+    return { symbol, paths, reaches: paths.map((entry) => entry.target) };
+  }).filter((connector) => connector.reaches.length >= 2)
+    .sort((left, right) => right.reaches.length - left.reaches.length
+      || left.paths.reduce((sum, path) => sum + path.symbols.length, 0)
+        - right.paths.reduce((sum, path) => sum + path.symbols.length, 0)
+      || left.symbol.localeCompare(right.symbol))
+    .slice(0, 6);
+  const definitionNames = new Set(requestedDefinitions.map((definition) => definition.name));
+  return {
+    definitionCoverage: {
+      matched: requested.filter((symbol) => definitionNames.has(symbol)),
+      unresolved: requested.filter((symbol) => !definitionNames.has(symbol)),
+    },
+    definitions: requestedDefinitions,
+    callers: usefulEdges.filter((edge) => requestedSet.has(edge.to)).slice(0, 48),
+    callees: usefulEdges.filter((edge) => requestedSet.has(edge.from)).slice(0, 48),
+    connectors,
+  };
+}
+
 export async function resolvePublicSymbols(
   project: PublicSourceProject,
   symbols: string[],
-  options: { maxFiles?: number; maxResults?: number; pathHints?: string[] } = {},
+  options: { maxFiles?: number; maxResults?: number; pathHints?: string[]; includeRelationships?: boolean } = {},
   accessToken?: string,
 ) {
   assertPublicSourceReadable(project);
@@ -166,45 +268,103 @@ export async function resolvePublicSymbols(
   }
 
   const files: PublicSymbolFile[] = [];
+  const definitions: PublicGraphDefinition[] = [];
+  const edges: PublicCallEdge[] = [];
   const substantivelyMatched = new Set<string>();
+  const definitionMatched = new Set<string>();
   let scannedFiles = 0;
   let scannedBytes = 0;
-  const batches: Array<typeof selected> = [
-    ...selected.slice(0, hintedCount).map((entry) => [entry]),
-  ];
-  for (let offset = hintedCount; offset < selected.length; offset += 6) {
-    batches.push(selected.slice(offset, offset + 6));
-  }
-  for (const entries of batches) {
-    if (requested.every((symbol) => substantivelyMatched.has(symbol))) break;
+  const scannedPaths = new Set<string>();
+  const skippedPaths = new Set<string>();
+  const priorityImports: typeof selected = [];
+  let hintOffset = 0;
+  let genericOffset = hintedCount;
+  while (true) {
+    const complete = options.includeRelationships
+      ? requested.every((symbol) => definitionMatched.has(symbol))
+      : requested.every((symbol) => substantivelyMatched.has(symbol));
+    if (complete) break;
+    let entries: typeof selected;
+    if (hintOffset < hintedCount) {
+      entries = [selected[hintOffset]];
+      hintOffset += 1;
+    } else {
+      const imported = priorityImports.find((entry) => !scannedPaths.has(entry.path) && !skippedPaths.has(entry.path));
+      if (imported) entries = [imported];
+      else {
+        entries = [];
+        while (genericOffset < selected.length && entries.length < 6) {
+          const entry = selected[genericOffset];
+          genericOffset += 1;
+          if (!scannedPaths.has(entry.path) && !skippedPaths.has(entry.path)) entries.push(entry);
+        }
+      }
+    }
+    if (!entries.length) break;
+    const admitted: typeof selected = [];
+    let admittedBytes = scannedBytes;
+    for (const entry of entries) {
+      const size = entry.size ?? 64_000;
+      if (scannedFiles + admitted.length >= maxFiles || admittedBytes + size > MAX_SCAN_BYTES) {
+        skippedPaths.add(entry.path);
+        continue;
+      }
+      admitted.push(entry);
+      admittedBytes += size;
+    }
+    entries = admitted;
+    if (!entries.length) continue;
+    entries.forEach((entry) => scannedPaths.add(entry.path));
     scannedFiles += entries.length;
     scannedBytes += entries.reduce((sum, entry) => sum + (entry.size ?? 64_000), 0);
     const batch = await Promise.all(entries.map(async (entry) => {
       try {
         const source = await fetchPublicSourceText(project, entry.path);
-        return { entry, lines: source.content.split(/\r?\n/) };
+        return { entry, analysis: analyzeSourceStructure(source.content, entry.path, requested) };
       } catch {
         return null;
       }
     }));
     for (const source of batch) {
       if (!source) continue;
-      const occurrences: PublicSymbolOccurrence[] = [];
-      for (const symbol of requested) {
-        const pattern = new RegExp(`\\b${escapeRegex(symbol)}\\b`);
-        let symbolMatches = 0;
-        for (let index = 0; index < source.lines.length && symbolMatches < 12; index += 1) {
-          if (!pattern.test(source.lines[index])) continue;
-          const kind = occurrenceKind(source.lines[index], symbol);
-          if (!kind) continue;
-          occurrences.push({
-            symbol,
-            line: index + 1,
-            kind,
-            sourceUrl: sourceLineUrl(project, source.entry.path, index + 1),
-          });
-          if (kind !== "import") substantivelyMatched.add(symbol);
-          symbolMatches += 1;
+      const occurrences: PublicSymbolOccurrence[] = source.analysis.occurrences.map((occurrence) => ({
+        ...occurrence,
+        sourceUrl: sourceLineUrl(project, source.entry.path, occurrence.line),
+      }));
+      for (const occurrence of occurrences) {
+        if (occurrence.kind !== "import") substantivelyMatched.add(occurrence.symbol);
+      }
+      for (const definition of source.analysis.definitions.slice(0, 240)) {
+        definitions.push({
+          ...definition,
+          path: source.entry.path,
+          sourceUrl: sourceLineUrl(project, source.entry.path, definition.line),
+        });
+        if (requested.includes(definition.name)) definitionMatched.add(definition.name);
+      }
+      for (const call of source.analysis.calls.slice(0, 480)) {
+        if (!call.scopeName) continue;
+        edges.push({
+          from: call.scopeName,
+          to: call.name,
+          path: source.entry.path,
+          line: call.line,
+          sourceUrl: sourceLineUrl(project, source.entry.path, call.line),
+          scopeKind: call.scopeKind,
+          scopeStartLine: call.scopeStartLine,
+          scopeEndLine: call.scopeEndLine,
+        });
+      }
+      if (options.includeRelationships) {
+        for (const imported of source.analysis.imports) {
+          if (!requested.includes(imported.symbol)) continue;
+          for (const candidate of relativeImportCandidates(source.entry.path, imported.module)) {
+            const entry = ranked.find((rankedEntry) => rankedEntry.path === candidate);
+            if (entry && !priorityImports.some((item) => item.path === entry.path)) {
+              priorityImports.push(entry);
+              break;
+            }
+          }
         }
       }
       if (!occurrences.length) continue;
@@ -224,7 +384,7 @@ export async function resolvePublicSymbols(
     || left.path.localeCompare(right.path));
   const maxResults = Math.min(options.maxResults ?? 8, 20);
   const returnedFiles = files.slice(0, maxResults);
-  const matched = new Set(returnedFiles.flatMap((file) => file.matchedSymbols));
+  const matched = new Set(files.flatMap((file) => file.matchedSymbols));
   return {
     commit: project.sourceCommit as string,
     requested,
@@ -235,6 +395,7 @@ export async function resolvePublicSymbols(
     scannedFiles,
     scannedBytes,
     files: returnedFiles,
+    graph: publicGraph(requested, definitions, edges),
   };
 }
 
@@ -248,6 +409,7 @@ export async function buildPublicSourceEvidence(
     maxFiles: options.maxFiles,
     maxResults: 8,
     pathHints: options.pathHints,
+    includeRelationships: true,
   }, accessToken);
   const clusters: Array<{
     path: string;

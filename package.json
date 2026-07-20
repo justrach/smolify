@@ -14,6 +14,8 @@
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
+    "test:retrieval-parity": "vitest run lib/evals/retrieval-parity.test.ts lib/imports/source-analysis.test.ts lib/imports/public-symbols.test.ts lib/docs/context.test.ts lib/docs/source-context.test.ts lib/docs/search-repository.test.ts lib/mcp/auth.test.ts lib/mcp/server.test.ts",
+    "test:retrieval-parity:live": "SMOLIFY_LIVE_PARITY=1 vitest run lib/evals/retrieval-parity.live.test.ts",
     "test:e2e:mcp": "node scripts/e2e-mcp.mjs",
     "test:e2e:community": "node scripts/e2e-community.mjs"
   },

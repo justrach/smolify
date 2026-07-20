@@ -2,7 +2,9 @@ import { homedir } from "node:os";
 import { fileURLToPath } from "node:url";
 import { DEFAULT_ENDPOINT, parseAgentIds, runInstaller, type AgentId } from "./installer.js";
 
-const VERSION = "0.1.0";
+declare const SMOLY_VERSION: string;
+
+const VERSION = SMOLY_VERSION;
 
 function help() {
   console.log(`smoly ${VERSION}

@@ -107,6 +107,10 @@ The MCP surface stays deliberately narrow:
   exact source-file hints first, then ranks paths from the pinned public GitHub
   tree and scans at most 96 files/4 MB. It returns value-free occurrences and
   commit-pinned links, and reports unresolved identifiers explicitly.
+- `inspect_public_symbols(project, symbols, pathHints?, maxResults)` adds exact
+  definitions, scoped callers/callees, and short connector paths. It follows
+  relative imports before using the same bounded fallback scan and persists no
+  fetched source body.
 - `read_docs_structure(project)` lists the active pages and provenance without
   dumping their Markdown.
 - `publish_docs(project, bundle)` validates and activates an immutable bundle.
@@ -168,10 +172,13 @@ retrieval pattern from `justrach/codedb`:
    file-map noise, de-duplicates pages, and gives selected pages fair shares of
    an explicit token-derived character budget.
 6. For public code-shaped queries, exact source page paths become resolver
-   hints. The resolver checks those paths before a bounded ranked scan of the
-   pinned GitHub tree, then packs the most useful implementation ranges into
-   the same context budget. Smolify returns evidence; the calling agent
-   performs synthesis.
+   hints. The resolver checks those paths, follows relative imports for
+   requested definitions, and only then uses a bounded ranked scan of the
+   pinned GitHub tree. A value-free structural pass masks comments, strings,
+   and regular expressions before deriving exact definitions, scoped call
+   edges, and connector paths. The graph and complementary implementation
+   ranges are admitted by value under one hard serialized context cap. Smolify
+   returns evidence; the calling agent performs synthesis.
 7. Results are bounded. Agents search first, then fetch a page slice or at most
    200 commit-pinned public source lines; a tool call never dumps the entire
    corpus or repository into context.
@@ -195,6 +202,12 @@ introduction metadata overlays the immutable R2 payload at render time so the
 catalog, SEO, and hosted docs stay consistent without rewriting history.
 Search eval fixtures should become a release gate for API identifiers, endpoint
 paths, error names, and common natural-language tasks.
+
+The retrieval parity suite is such a release gate for code-architecture tasks.
+Its deterministic fixtures cover decoy-resistant parsing, definition and edge
+recall, connector paths, explicit misses, provenance, authorization, MCP tool
+metadata, and monotonic hard-budget packing. An opt-in live test repeats the
+Next.js navigation trace against the current public canary commit.
 
 ## Custom domains
 

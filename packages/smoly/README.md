@@ -1,10 +1,10 @@
-# smoly
+# smolify
 
 One command installs the hosted Smolify MCP and the `smolify-api-docs` Agent
 Skill without copying access tokens into a repository:
 
 ```bash
-bunx smoly install
+bunx smolify install
 ```
 
 The installer writes an additive `smolify` entry to `~/.mcpconfig.json` (the

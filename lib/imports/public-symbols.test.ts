@@ -30,6 +30,7 @@ function githubFetch() {
         tree: [
           { path: "src/client/segment-cache/navigation.ts", type: "blob", size: navigationSource.length },
           { path: "src/client/segment-cache/cache.ts", type: "blob", size: 80 },
+          { path: "src/client/segment-cache/fetch-server-response.ts", type: "blob", size: 90 },
           { path: "src/unrelated.ts", type: "blob", size: 80 },
         ],
       });
@@ -37,6 +38,9 @@ function githubFetch() {
     if (url.endsWith("/src/client/segment-cache/navigation.ts")) return new Response(navigationSource);
     if (url.endsWith("/src/client/segment-cache/cache.ts")) {
       return new Response("export function readRouteCacheEntry() { return null }");
+    }
+    if (url.endsWith("/src/client/segment-cache/fetch-server-response.ts")) {
+      return new Response("export async function fetchServerResponse() { return null }");
     }
     return new Response("export const unrelated = true");
   });
@@ -67,6 +71,49 @@ describe("public symbol resolution", () => {
       ],
     });
     expect(result.scannedBytes).toBeLessThanOrEqual(4 * 1024 * 1024);
+  });
+
+  it("returns definition coverage, scoped callers, callees, and connecting paths", async () => {
+    vi.stubGlobal("fetch", githubFetch());
+    const result = await resolvePublicSymbols(project, [
+      "navigateUsingPrefetchedRouteTree",
+      "readRouteCacheEntry",
+      "fetchServerResponse",
+    ], { includeRelationships: true, pathHints: ["src/client/segment-cache/navigation.ts"] });
+
+    expect(result.graph.definitionCoverage).toEqual({
+      matched: [
+        "navigateUsingPrefetchedRouteTree",
+        "readRouteCacheEntry",
+        "fetchServerResponse",
+      ],
+      unresolved: [],
+    });
+    expect(result.graph.callers).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        from: "navigateUsingPrefetchedRouteTree",
+        to: "readRouteCacheEntry",
+        path: "src/client/segment-cache/navigation.ts",
+      }),
+      expect.objectContaining({
+        from: "navigateToUnknownRoute",
+        to: "fetchServerResponse",
+        path: "src/client/segment-cache/navigation.ts",
+      }),
+    ]));
+    expect(result.graph.callees).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        from: "navigateUsingPrefetchedRouteTree",
+        to: "readRouteCacheEntry",
+      }),
+    ]));
+    expect(result.graph.connectors).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        symbol: "navigateUsingPrefetchedRouteTree",
+        reaches: expect.arrayContaining(["readRouteCacheEntry", "fetchServerResponse"]),
+      }),
+    ]));
+    expect(result.scannedFiles).toBe(3);
   });
 
   it("reports unresolved identifiers without exceeding the fallback scan caps", async () => {
@@ -148,7 +195,11 @@ describe("public symbol resolution", () => {
       symbols: ["fetchServerResponse"],
     });
     expect(result.evidence[1].content).toContain("return fetchServerResponse(route)");
-    expect(result.resolution.scannedFiles).toBe(1);
-    expect(result.resolution.scannedBytes).toBe(spacedNavigation.length);
+    expect(result.resolution.scannedFiles).toBe(2);
+    expect(result.resolution.scannedBytes).toBe(spacedNavigation.length + 80);
+    expect(result.resolution.graph.definitionCoverage).toEqual({
+      matched: ["navigateUsingPrefetchedRouteTree", "fetchServerResponse"],
+      unresolved: ["readRouteCacheEntry"],
+    });
   });
 });

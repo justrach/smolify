@@ -65,7 +65,7 @@ async function exists(path: string) {
   }
 }
 
-function normalizeEndpoint(endpoint: string) {
+export function normalizeEndpoint(endpoint: string) {
   const parsed = new URL(endpoint);
   if (parsed.protocol !== "https:" && parsed.hostname !== "localhost" && parsed.hostname !== "127.0.0.1") {
     throw new Error("Smolify endpoint must use HTTPS");
@@ -270,4 +270,10 @@ export function parseAgentIds(value: string) {
   const unknown = requested.filter((item) => !known.has(item as AgentId));
   if (unknown.length) throw new Error(`Unknown agent: ${unknown.join(", ")}`);
   return [...new Set(requested)] as AgentId[];
+}
+
+export function shouldAutoInstall(environment: NodeJS.ProcessEnv) {
+  if (environment.SMOLIFY_SKIP_POSTINSTALL === "1") return false;
+  if (environment.SMOLIFY_AUTO_INSTALL === "1") return true;
+  return environment.npm_config_global === "true" || environment.npm_config_global === "1";
 }

@@ -1,5 +1,6 @@
 import { homedir } from "node:os";
 import { fileURLToPath } from "node:url";
+import { probeMcpEndpoint } from "./doctor.js";
 import { DEFAULT_ENDPOINT, parseAgentIds, runInstaller, type AgentId } from "./installer.js";
 
 declare const SMOLY_VERSION: string;
@@ -7,14 +8,15 @@ declare const SMOLY_VERSION: string;
 const VERSION = SMOLY_VERSION;
 
 function help() {
-  console.log(`smoly ${VERSION}
+  console.log(`smolify ${VERSION}
 
 Install Smolify for coding agents.
 
 Usage:
-  smoly install [options]
-  smoly status [options]
-  smoly uninstall [options]
+  smolify install [options]
+  smolify status [options]
+  smolify doctor [options]
+  smolify uninstall [options]
 
 Options:
   --agent <ids>       Comma-separated agents (codex, claude, cursor, ...)
@@ -31,7 +33,7 @@ async function main() {
   if (args.includes("--help") || args.includes("-h")) return help();
   if (args.includes("--version") || args.includes("-v")) return console.log(VERSION);
   const command = args[0] && !args[0].startsWith("-") ? args.shift()! : "install";
-  if (!(["install", "uninstall", "status"] as const).includes(command as "install" | "uninstall" | "status")) {
+  if (!(["install", "uninstall", "status", "doctor"] as const).includes(command as "install" | "uninstall" | "status" | "doctor")) {
     throw new Error(`Unknown command: ${command}`);
   }
 
@@ -48,6 +50,12 @@ async function main() {
     else if (arg === "--mcp-only") installSkill = false;
     else if (arg === "--skill-only") installMcp = false;
     else throw new Error(`Unknown option: ${arg}`);
+  }
+
+  if (command === "doctor") {
+    const health = await probeMcpEndpoint(endpoint);
+    console.log(`Smolify MCP ready\n  ✓ ${health.endpoint}\n  ✓ ${health.serverName} ${health.serverVersion}\n  ✓ protocol ${health.protocolVersion}\n  ✓ ${health.tools.length} tools`);
+    return;
   }
 
   const skillSource = fileURLToPath(new URL("./skill", import.meta.url));
@@ -71,10 +79,16 @@ async function main() {
   if (command === "install" && !dryRun) {
     console.log("\nPublic docs work immediately. Restart open agents after first install.");
     console.log("For private docs or publishing in Codex: codex mcp login smolify");
+    try {
+      const health = await probeMcpEndpoint(endpoint);
+      console.log(`MCP verified: ${health.tools.length} tools at ${health.endpoint}`);
+    } catch (error) {
+      console.warn(`MCP configuration installed, but the live check failed: ${error instanceof Error ? error.message : String(error)}`);
+    }
   }
 }
 
 main().catch((error) => {
-  console.error(`smoly: ${error instanceof Error ? error.message : String(error)}`);
+  console.error(`smolify: ${error instanceof Error ? error.message : String(error)}`);
   process.exitCode = 1;
 });

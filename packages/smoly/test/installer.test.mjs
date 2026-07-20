@@ -7,7 +7,9 @@ import {
   patchCodexMcpConfig,
   patchJsonMcpConfig,
   runInstaller,
+  shouldAutoInstall,
 } from "../dist/installer.js";
+import { probeMcpEndpoint } from "../dist/doctor.js";
 
 const skillSource = resolve(import.meta.dirname, "../dist/skill");
 
@@ -56,4 +58,31 @@ test("installer writes atomically to selected agents and installs the shared ski
   assert.ok(after.mcpServers.foreign);
   assert.equal(after.mcpServers.smolify, undefined);
   await assert.rejects(readFile(join(home, ".agents/skills/smolify-api-docs/SKILL.md"), "utf8"), /ENOENT/);
+});
+
+test("postinstall auto-registration is global-only and can be overridden", () => {
+  assert.equal(shouldAutoInstall({}), false);
+  assert.equal(shouldAutoInstall({ npm_config_global: "true" }), true);
+  assert.equal(shouldAutoInstall({ npm_config_global: "1" }), true);
+  assert.equal(shouldAutoInstall({ npm_config_global: "true", SMOLIFY_SKIP_POSTINSTALL: "1" }), false);
+  assert.equal(shouldAutoInstall({ SMOLIFY_AUTO_INSTALL: "1" }), true);
+});
+
+test("MCP doctor performs initialize and tool discovery", async () => {
+  const calls = [];
+  const fakeFetch = async (url, init) => {
+    const request = JSON.parse(init.body);
+    calls.push({ url, request });
+    const result = request.method === "initialize"
+      ? { protocolVersion: "2025-06-18", serverInfo: { name: "smolify", version: "1.2.3" } }
+      : { tools: [{ name: "discover_public_projects" }, { name: "search_docs" }] };
+    return new Response(JSON.stringify({ jsonrpc: "2.0", id: request.id, result }), {
+      status: 200,
+      headers: { "content-type": "application/json" },
+    });
+  };
+  const health = await probeMcpEndpoint("https://app.smol.ly/", fakeFetch);
+  assert.equal(health.endpoint, "https://app.smol.ly/mcp");
+  assert.deepEqual(health.tools, ["discover_public_projects", "search_docs"]);
+  assert.deepEqual(calls.map((call) => call.request.method), ["initialize", "tools/list"]);
 });

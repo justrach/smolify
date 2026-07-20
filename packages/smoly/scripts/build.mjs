@@ -10,7 +10,12 @@ const manifest = await Bun.file(resolve(packageRoot, "package.json")).json();
 await rm(output, { recursive: true, force: true });
 await mkdir(output, { recursive: true });
 const result = await Bun.build({
-  entrypoints: [resolve(packageRoot, "src/cli.ts"), resolve(packageRoot, "src/installer.ts")],
+  entrypoints: [
+    resolve(packageRoot, "src/cli.ts"),
+    resolve(packageRoot, "src/doctor.ts"),
+    resolve(packageRoot, "src/installer.ts"),
+    resolve(packageRoot, "src/postinstall.ts"),
+  ],
   outdir: output,
   target: "node",
   format: "esm",
@@ -25,3 +30,4 @@ if (!result.success) {
 }
 await cp(resolve(repositoryRoot, "skills/smolify-api-docs"), resolve(output, "skill"), { recursive: true });
 await chmod(resolve(output, "cli.js"), 0o755);
+await chmod(resolve(output, "postinstall.js"), 0o755);

@@ -1,9 +1,10 @@
 {
   "name": "smolify",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "description": "Install the Smolify MCP and agent skill across coding agents.",
   "type": "module",
   "bin": {
+    "smolify": "dist/cli.js",
     "smoly": "dist/cli.js"
   },
   "exports": {
@@ -15,6 +16,7 @@
   "scripts": {
     "build": "bun run scripts/build.mjs",
     "test": "bun run build && node --test test/*.test.mjs",
+    "postinstall": "node dist/postinstall.js",
     "prepack": "bun run build",
     "prepublishOnly": "bun run test"
   },

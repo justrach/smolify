@@ -25,8 +25,8 @@ approve.
 ## Try it in two commands
 
 ```bash
-bunx smolify install --agent codex
-codex mcp login smolify
+npx -y smolify --agent codex
+codex mcp login smolify # only for private docs or writes
 ```
 
 Then open the API repository in Codex and ask:
@@ -250,7 +250,16 @@ The cross-agent installer writes the additive `smolify` entry to
 at `~/.agents/skills/smolify-api-docs`:
 
 ```bash
-bunx smolify install
+npx -y smolify
+```
+
+Or install it globally. The npm `postinstall` follows CodeDB's auto-registration
+experience: it detects installed agents, adds only the `smolify` entry, installs
+the shared skill, and verifies the hosted MCP handshake.
+
+```bash
+npm install -g smolify
+smolify doctor
 ```
 
 Authorize Codex only when you want to contribute, read a private project, or
@@ -260,9 +269,11 @@ publish:
 codex mcp login smolify
 ```
 
-The two-command quick start is complete; `smoly` configures the MCP and installs
-the shared skill. Manual alternatives are available for troubleshooting and
-local skill development:
+The `smolify` command configures the MCP and installs the shared skill; `smoly`
+remains an alias for existing installs. Unlike CodeDB, Smolify needs no local
+native binary: agents connect directly to the hosted HTTP MCP so OAuth remains
+client-native. Manual alternatives are available for troubleshooting and local
+skill development:
 
 <details>
 <summary><strong>Manual MCP and skill installation</strong></summary>

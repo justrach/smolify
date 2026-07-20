@@ -16,7 +16,7 @@ evidence for coding agents.
 
 [Try Smolify](https://app.smol.ly) ·
 [Browse the Pawprint demo](https://app.smol.ly/pawprint/introduction) ·
-[See the reproducible benchmark](../BENCHMARK.md)
+[See the reproducible benchmark on GitHub](https://github.com/justrach/smolify/blob/main/BENCHMARK.md)
 
 ## The 30-second version
 

@@ -2,6 +2,7 @@ import Link from "next/link";
 import type { Metadata } from "next";
 import { Suspense } from "react";
 import { getCloudflareContext } from "@opennextjs/cloudflare";
+import { AgentOnboarding } from "@/components/agent-onboarding";
 import { Brand } from "@/components/brand";
 import { RepositoryBrowser } from "@/components/repository-browser";
 import { listPublicProjects } from "@/lib/projects/access";
@@ -57,6 +58,7 @@ export default function HomePage() {
         <div className="eyebrow">Tiny setup. Serious docs.</div>
         <h1>Understand any repository.<br />Document yours.</h1>
         <p>Search source-grounded docs below. Paste a GitHub URL when you want Smolify to create and host a new set.</p>
+        <div className="repository-hero-actions"><AgentOnboarding /></div>
       </section>
       <Suspense fallback={<RepositoryCatalogFallback />}>
         <RepositoryCatalog />

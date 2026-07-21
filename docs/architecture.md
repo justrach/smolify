@@ -30,6 +30,13 @@ customer OpenAI API key.
   publish-token hashes.
 - R2 stores immutable bundle versions and generated assets under
   `projects/{projectId}/deployments/{deploymentId}/...`.
+- The apex `smol.ly` custom-domain route permanently redirects to the
+  canonical application origin at `app.smol.ly`; project subdomains continue
+  to resolve directly under `*.smol.ly`.
+- The public `app.smol.ly/` document is cached in Cloudflare's regional Cache
+  API for 60 seconds. RSC navigation/prefetch requests, non-HTML requests, and
+  every tenant/custom-domain route bypass this cache; responses that set a
+  cookie are never stored.
 - A custom Cloudflare Worker entry can resolve `project.smol.ly` and active
   D1-backed custom hostnames into the tenant route before calling the generated
   OpenNext handler. The current production deployment uses stable

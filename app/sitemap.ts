@@ -17,19 +17,11 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
      ORDER BY projects.updated_at DESC, doc_pages.slug
      LIMIT 45000`,
   ).all<{ project: string; slug: string; updatedAt: string }>();
-  const projectEntries = new Map<string, string>();
-  for (const row of result.results) projectEntries.set(row.project, row.updatedAt);
   return [
     { url: "https://app.smol.ly", changeFrequency: "daily", priority: 1 },
     { url: "https://app.smol.ly/explore", changeFrequency: "daily", priority: 0.9 },
     { url: "https://app.smol.ly/privacy", changeFrequency: "monthly", priority: 0.3 },
     { url: "https://app.smol.ly/terms", changeFrequency: "monthly", priority: 0.3 },
-    ...[...projectEntries].map(([project, updatedAt]) => ({
-      url: `https://app.smol.ly/explore/${project}`,
-      lastModified: new Date(updatedAt),
-      changeFrequency: "weekly" as const,
-      priority: 0.8,
-    })),
     ...result.results.map((row) => ({
       url: `https://app.smol.ly/${row.project}/${row.slug}`,
       lastModified: new Date(row.updatedAt),

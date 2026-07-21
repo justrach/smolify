@@ -4,6 +4,7 @@ type BrandProps = {
   compact?: boolean;
   href?: string;
   label?: string;
+  prefetch?: boolean;
 };
 
 export function BrandMark({ compact = false }: Pick<BrandProps, "compact">) {
@@ -23,9 +24,9 @@ export function BrandMark({ compact = false }: Pick<BrandProps, "compact">) {
   );
 }
 
-export function Brand({ compact = false, href = "/", label = "Smolify" }: BrandProps) {
+export function Brand({ compact = false, href = "/", label = "Smolify", prefetch }: BrandProps) {
   return (
-    <Link href={href} className={compact ? "brand brand-compact" : "brand"}>
+    <Link href={href} className={compact ? "brand brand-compact" : "brand"} prefetch={prefetch}>
       <BrandMark compact={compact} />
       <span>{label}</span>
     </Link>

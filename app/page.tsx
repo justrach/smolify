@@ -1,5 +1,6 @@
 import Link from "next/link";
 import type { Metadata } from "next";
+import { Suspense } from "react";
 import { getCloudflareContext } from "@opennextjs/cloudflare";
 import { Brand } from "@/components/brand";
 import { RepositoryBrowser } from "@/components/repository-browser";
@@ -13,17 +14,43 @@ export const metadata: Metadata = {
   alternates: { canonical: "/" },
 };
 
-export default async function HomePage() {
+async function RepositoryCatalog() {
   const { env } = await getCloudflareContext({ async: true });
   const projects = await listPublicProjects(env, 18);
 
+  return <RepositoryBrowser projects={projects} />;
+}
+
+function RepositoryCatalogFallback() {
+  return (
+    <section
+      aria-busy="true"
+      aria-label="Loading repository catalog"
+      className="repository-browser repository-browser-fallback"
+    >
+      <div className="repository-search-shell">
+        <div className="repository-search repository-search-placeholder">
+          <span aria-hidden="true">⌕</span>
+          <span>Loading public repositories…</span>
+        </div>
+      </div>
+      <div aria-hidden="true" className="repository-grid repository-grid-placeholder">
+        <div className="repository-card" />
+        <div className="repository-card" />
+        <div className="repository-card" />
+      </div>
+    </section>
+  );
+}
+
+export default function HomePage() {
   return (
     <main className="landing-shell">
       <nav className="landing-nav">
-        <Brand />
+        <Brand prefetch={false} />
         <div className="nav-actions">
-          <Link href="/explore">Explore</Link>
-          <Link href="/dashboard" className="button button-small">Import a repository</Link>
+          <Link href="/explore" prefetch={false}>Explore</Link>
+          <Link href="/dashboard" className="button button-small" prefetch={false}>Import a repository</Link>
         </div>
       </nav>
       <section className="repository-hero">
@@ -31,7 +58,9 @@ export default async function HomePage() {
         <h1>Understand any repository.<br />Document yours.</h1>
         <p>Search source-grounded docs below. Paste a GitHub URL when you want Smolify to create and host a new set.</p>
       </section>
-      <RepositoryBrowser projects={projects} />
+      <Suspense fallback={<RepositoryCatalogFallback />}>
+        <RepositoryCatalog />
+      </Suspense>
       <section className="agent-install-band" aria-label="Agent setup">
         <div><span>For agents</span><strong>One hosted MCP. Public docs need no account.</strong><p>OAuth appears only when an agent reads private docs, contributes, or publishes.</p></div>
         <div className="command"><span>›</span> codex mcp add smolify --url <b>https://app.smol.ly/mcp</b></div>

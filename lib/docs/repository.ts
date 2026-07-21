@@ -1,8 +1,9 @@
 import { getCloudflareContext } from "@opennextjs/cloudflare";
+import { cache } from "react";
 import { demoBundle } from "./demo";
 import { docsBundleSchema, type DocsBundle } from "./schema";
 
-export async function getDocsBundle(projectSlug: string): Promise<DocsBundle | null> {
+async function loadDocsBundle(projectSlug: string): Promise<DocsBundle | null> {
   if (projectSlug === "pawprint") return demoBundle;
 
   try {
@@ -70,3 +71,7 @@ export async function getDocsBundle(projectSlug: string): Promise<DocsBundle | n
     return null;
   }
 }
+
+// A docs request uses the same bundle in both metadata and the route. R2
+// objects can be large, so only fetch and validate a bundle once per render.
+export const getDocsBundle = cache(loadDocsBundle);

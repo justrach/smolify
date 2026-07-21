@@ -1,5 +1,7 @@
 "use client";
 
+import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 import { COMMUNITY_REVIEW_THRESHOLD, reviewTrustLabel, reviewTrustProgress } from "@/lib/trust/reviews";
 
@@ -40,6 +42,7 @@ function githubUrl(value: string) {
 }
 
 export function RepositoryBrowser({ projects }: { projects: RepositoryBrowserProject[] }) {
+  const router = useRouter();
   const [query, setQuery] = useState("");
   const normalized = query.trim().toLowerCase();
   const candidateUrl = githubUrl(query);
@@ -74,8 +77,8 @@ export function RepositoryBrowser({ projects }: { projects: RepositoryBrowserPro
           className="repository-search"
           onSubmit={(event) => {
             event.preventDefault();
-            if (exactProject) window.location.assign(`/explore/${exactProject.slug}`);
-            else if (candidateUrl) window.location.assign(importHref);
+            if (exactProject) router.push(`/${exactProject.slug}/introduction`);
+            else if (candidateUrl) router.push(importHref);
           }}
         >
           <span aria-hidden="true">⌕</span>
@@ -96,13 +99,13 @@ export function RepositoryBrowser({ projects }: { projects: RepositoryBrowserPro
       </div>
 
       <div className="repository-grid">
-        <a className="repository-card repository-add-card" href={importHref}>
+        <Link className="repository-card repository-add-card" href={importHref} prefetch={false}>
           <span className="repository-add-icon">+</span>
           <div><strong>{candidateUrl && !exactProject ? `Import ${candidateName}` : "Document your repository"}</strong><p>Import from GitHub or upload a private ZIP</p></div>
           <span className="repository-arrow" aria-hidden="true">→</span>
-        </a>
+        </Link>
         {visibleProjects.map((project) => (
-          <a className="repository-card" href={`/explore/${project.slug}`} key={project.slug}>
+          <Link className="repository-card" href={`/${project.slug}/introduction`} key={project.slug} prefetch={false}>
             <div className="repository-card-copy">
               <span className="repository-owner">{repositoryName(project.sourceUrl)}</span>
               <div className="repository-title-line">
@@ -128,7 +131,7 @@ export function RepositoryBrowser({ projects }: { projects: RepositoryBrowserPro
               {project.acceptedImprovements > 0 && <span>{project.acceptedImprovements} accepted</span>}
               <span className="repository-arrow" aria-hidden="true">→</span>
             </div>
-          </a>
+          </Link>
         ))}
         {!visibleProjects.length && (
           <div className="repository-card repository-no-results">

@@ -16,6 +16,8 @@ jobs:
       BENCHMARK_REPEATS: '3'
     steps:
       - uses: actions/checkout@v4
+      - name: Trust this temporary container checkout
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
       - name: Identical benchmark workload
         run: node scripts/runner-benchmark.mjs > runner-benchmark.log 2>&1
       - uses: actions/upload-artifact@v4

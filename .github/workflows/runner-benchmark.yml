@@ -9,7 +9,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 25
     container:
-      image: node:24.14.1-bookworm
+      image: node:24.14.1-bookworm@sha256:80fc934952c8f1b2b4d39907af7211f8a9fff1a4c2cf673fb49099292c251cec
       options: --cpus 4 --memory 16g
     env:
       BENCHMARK_PROVIDER: github
@@ -19,7 +19,8 @@ jobs:
       - name: Trust this temporary container checkout
         run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
       - name: Identical benchmark workload
-        run: node scripts/runner-benchmark.mjs > runner-benchmark.log 2>&1
+        shell: bash
+        run: node scripts/runner-benchmark.mjs 2>&1 | tee runner-benchmark.log
       - uses: actions/upload-artifact@v4
         if: always()
         with:

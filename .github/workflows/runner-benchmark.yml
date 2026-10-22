@@ -1,0 +1,28 @@
+name: Runner benchmark
+on:
+  push:
+    branches: [codex/codegraff-runner-benchmark]
+permissions:
+  contents: read
+jobs:
+  matched-build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    container:
+      image: node:24.14.1-bookworm
+      options: --cpus 4 --memory 16g
+    env:
+      BENCHMARK_PROVIDER: github
+      BENCHMARK_REPEATS: '3'
+    steps:
+      - uses: actions/checkout@v4
+      - name: Identical benchmark workload
+        run: node scripts/runner-benchmark.mjs > runner-benchmark.log 2>&1
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: github-runner-benchmark
+          path: |
+            runner-benchmark-results.json
+            runner-benchmark.log
+          if-no-files-found: error
